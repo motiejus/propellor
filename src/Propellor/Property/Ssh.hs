@@ -4,7 +4,6 @@ module Propellor.Property.Ssh (
 	installed,
 	restarted,
 	PubKeyText,
-	SshKeyType(..),
 	-- * Daemon configuration
 	sshdConfig,
 	ConfigKeyword,
@@ -25,9 +24,7 @@ module Propellor.Property.Ssh (
 	userKeys,
 	userKeyAt,
 	knownHost,
-	unknownHost,
 	authorizedKeysFrom,
-	unauthorizedKeysFrom,
 	authorizedKeys,
 	authorizedKey,
 	hasAuthorizedKeys,
@@ -47,13 +44,10 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.List
 
-installed :: Property UnixLike
-installed = "ssh installed" ==> (aptinstall `pickOS` unsupportedOS)
-  where
-	aptinstall :: Property DebianLike
-	aptinstall = Apt.installed ["ssh"]
+installed :: Property NoInfo
+installed = Apt.installed ["ssh"]
 
-restarted :: Property DebianLike
+restarted :: Property NoInfo
 restarted = Service.restarted "ssh"
 
 sshBool :: Bool -> String
@@ -117,10 +111,10 @@ dotFile f user = do
 -- ports it is configured to listen on.
 --
 -- Revert to prevent it listening on a particular port.
-listenPort :: Port -> RevertableProperty DebianLike DebianLike
+listenPort :: Int -> RevertableProperty
 listenPort port = enable <!> disable
   where
-	portline = "Port " ++ val port
+	portline = "Port " ++ show port
 	enable = sshdConfig `File.containsLine` portline
 		`describe` ("ssh listening on " ++ portline)
 		`onChange` restarted
@@ -148,6 +142,9 @@ randomHostKeys = flagFile prop "/etc/ssh/.unique_host_keys"
 			]
 		ensureProperty w $ scriptProperty [ "DPKG_MAINTSCRIPT_NAME=postinst DPKG_MAINTSCRIPT_PACKAGE=openssh-server /var/lib/dpkg/info/openssh-server.postinst configure" ]
 			`assume` MadeChange
+
+-- | The text of a ssh public key, for example, "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB3BJ2GqZiTR2LEoDXyYFgh/BduWefjdKXAsAtzS9zeI"
+type PubKeyText = String
 
 -- | The text of a ssh public key, for example, "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB3BJ2GqZiTR2LEoDXyYFgh/BduWefjdKXAsAtzS9zeI"
 type PubKeyText = String
@@ -180,15 +177,25 @@ hostKeys ctx l = go `before` cleanup
 -- | Installs a single ssh host key of a particular type.
 --
 -- The public key is provided to this function;
--- the private key comes from the privdata;
-hostKey :: IsContext c => c -> SshKeyType -> PubKeyText -> Property (HasInfo + DebianLike)
-hostKey context keytype pub = go `onChange` restarted
+-- the private key comes from the privdata; 
+hostKey :: IsContext c => c -> SshKeyType -> PubKeyText -> Property HasInfo
+hostKey context keytype pub = combineProperties desc
+	[ hostPubKey keytype pub
+	, toProp $ property desc $ install File.hasContent True (lines pub)
+	, withPrivData (keysrc "" (SshPrivKey keytype "")) context $ \getkey ->
+		property desc $ getkey $
+			install File.hasContentProtected False . privDataLines
+	]
+	`onChange` restarted
   where
 	go = combineProperties desc $ props
 		& hostPubKey keytype pub
 		& installpub
 		& installpriv
 	desc = "ssh host key configured (" ++ fromKeyType keytype ++ ")"
+	install writer ispub keylines = do
+		let f = keyFile keytype ispub
+		ensureProperty $ writer f (keyFileContent keylines)
 	keysrc ext field = PrivDataSourceFileFromCommand field ("sshkey"++ext)
 		("ssh-keygen -t " ++ sshKeyTypeParam keytype ++ " -f sshkey")
 	installpub :: Property UnixLike
@@ -216,28 +223,28 @@ keyFile keytype ispub = "/etc/ssh/ssh_host_" ++ fromKeyType keytype ++ "_key" ++
 -- | Indicates the host key that is used by a Host, but does not actually
 -- configure the host to use it. Normally this does not need to be used;
 -- use 'hostKey' instead.
-hostPubKey :: SshKeyType -> PubKeyText -> Property (HasInfo + UnixLike)
+hostPubKey :: SshKeyType -> PubKeyText -> Property HasInfo
 hostPubKey t = pureInfoProperty "ssh pubkey known" . HostKeyInfo . M.singleton t
 
 getHostPubKey :: Propellor (M.Map SshKeyType PubKeyText)
 getHostPubKey = fromHostKeyInfo <$> askInfo
 
-newtype HostKeyInfo = HostKeyInfo
+newtype HostKeyInfo = HostKeyInfo 
 	{ fromHostKeyInfo :: M.Map SshKeyType PubKeyText }
-	deriving (Eq, Ord, Typeable, Show)
+	deriving (Eq, Ord, Typeable)
 
 instance IsInfo HostKeyInfo where
-	propagateInfo _ = PropagateInfo False
+	propigateInfo _ = False
 
 instance Monoid HostKeyInfo where
 	mempty = HostKeyInfo M.empty
-	mappend (HostKeyInfo old) (HostKeyInfo new) =
+	mappend (HostKeyInfo old) (HostKeyInfo new) = 
 		-- new first because union prefers values from the first
 		-- parameter when there is a duplicate key
 		HostKeyInfo (new `M.union` old)
 
-userPubKeys :: User -> [(SshKeyType, PubKeyText)] -> Property (HasInfo + UnixLike)
-userPubKeys u@(User n) l = pureInfoProperty ("ssh pubkey for " ++ n) $
+userPubKeys :: User -> [(SshKeyType, PubKeyText)] -> Property HasInfo
+userPubKeys u@(User n) l = pureInfoProperty ("ssh pubkey known for " ++ n) $
 	UserKeyInfo (M.singleton u (S.fromList l))
 
 getUserPubKeys :: User -> Propellor [(SshKeyType, PubKeyText)]
@@ -245,23 +252,23 @@ getUserPubKeys u = maybe [] S.toList . M.lookup u . fromUserKeyInfo <$> askInfo
 
 newtype UserKeyInfo = UserKeyInfo
 	{ fromUserKeyInfo :: M.Map User (S.Set (SshKeyType, PubKeyText)) }
-	deriving (Eq, Ord, Typeable, Show)
+	deriving (Eq, Ord, Typeable)
 
 instance IsInfo UserKeyInfo where
-	propagateInfo _ = PropagateInfo False
+	propigateInfo _ = False
 
 instance Monoid UserKeyInfo where
 	mempty = UserKeyInfo M.empty
-	mappend (UserKeyInfo old) (UserKeyInfo new) =
+	mappend (UserKeyInfo old) (UserKeyInfo new) = 
 		UserKeyInfo (M.unionWith S.union old new)
 
 -- | Sets up a user with the specified public keys, and the corresponding
 -- private keys from the privdata.
---
+-- 
 -- The public keys are added to the Info, so other properties like
 -- `authorizedKeysFrom` can use them.
-userKeys :: IsContext c => User -> c -> [(SshKeyType, PubKeyText)] -> Property (HasInfo + UnixLike)
-userKeys user@(User name) context ks = combineProperties desc $ toProps $
+userKeys :: IsContext c => User -> c -> [(SshKeyType, PubKeyText)] -> Property HasInfo
+userKeys user@(User name) context ks = propertyList desc $
 	userPubKeys user ks : map (userKeyAt Nothing user context) ks
   where
 	desc = unwords
@@ -270,15 +277,15 @@ userKeys user@(User name) context ks = combineProperties desc $ toProps $
 		, "(" ++ unwords (map (fromKeyType . fst) ks) ++ ")"
 		]
 
--- | Sets up a user with the specified pubic key, and a private
--- key from the privdata.
+-- | Sets up a user with a ssh private key and public key pair
+-- both coming from the PrivData.
 --
 -- A file can be specified to write the key to somewhere other than
 -- the default locations. Allows a user to have multiple keys for
 -- different roles.
-userKeyAt :: IsContext c => Maybe FilePath -> User -> c -> (SshKeyType, PubKeyText) -> Property (HasInfo + UnixLike)
+userKeyAt :: IsContext c => Maybe FilePath -> User -> c -> (SshKeyType, PubKeyText) -> Property HasInfo
 userKeyAt dest user@(User u) context (keytype, pubkeytext) =
-	combineProperties desc $ props
+	propertyList desc $ props
 		& pubkey
 		& privkey
   where
@@ -288,21 +295,17 @@ userKeyAt dest user@(User u) context (keytype, pubkeytext) =
 		, dest
 		, Just $ "(" ++ fromKeyType keytype ++ ")"
 		]
-	pubkey :: Property UnixLike
-	pubkey = property' desc $ \w -> 
-		ensureProperty w =<< installprop File.hasContent ".pub" [pubkeytext]
-	privkey :: Property (HasInfo + UnixLike)
-	privkey = withPrivData (SshPrivKey keytype u) context privkey'
-	privkey' :: ((PrivData -> Propellor Result) -> Propellor Result) -> Property (HasInfo + UnixLike)
-	privkey' getkey = property' desc $ \w -> getkey $ \k ->
-		ensureProperty w
-			=<< installprop File.hasContentProtected "" (privDataLines k)
-	installprop writer ext key = do
+	pubkey = property desc $ install File.hasContent ".pub" [pubkeytext]
+	privkey = withPrivData (SshPrivKey keytype u) context $ \getkey -> 
+		property desc $ getkey $
+			install File.hasContentProtected "" . privDataLines
+	install writer ext key = do
 		f <- liftIO $ keyfile ext
-		return $ combineProperties desc $ props
-			& writer f (keyFileContent key)
-			& File.ownerGroup f user (userGroup user)
-			& File.ownerGroup (takeDirectory f) user (userGroup user)
+		ensureProperties
+			[ writer f (keyFileContent key)
+			, File.ownerGroup f user (userGroup user)
+			, File.ownerGroup (takeDirectory f) user (userGroup user)
+			]
 	keyfile ext = case dest of
 		Nothing -> do
 			home <- homeDirectory <$> getUserEntryForName u
@@ -317,9 +320,9 @@ fromKeyType SshEd25519 = "ed25519"
 
 -- | Puts some host's ssh public key(s), as set using `hostPubKey`
 -- or `hostKey` into the known_hosts file for a user.
-knownHost :: [Host] -> HostName -> User -> Property UnixLike
-knownHost hosts hn user@(User u) = property' desc $ \w ->
-	go w =<< knownHostLines hosts hn
+knownHost :: [Host] -> HostName -> User -> Property NoInfo
+knownHost hosts hn user@(User u) = property desc $
+	go =<< fromHost hosts hn getHostPubKey
   where
 	desc = u ++ " knows ssh key for " ++ hn
 
@@ -328,71 +331,34 @@ knownHost hosts hn user@(User u) = property' desc $ \w ->
 		return FailedChange
 	go w ls = do
 		f <- liftIO $ dotFile "known_hosts" user
-		ensureProperty w $ modKnownHost user f $
-			f `File.containsLines` ls
-				`requires` File.dirExists (takeDirectory f)
+		ensureProperty $ combineProperties desc
+			[ File.dirExists (takeDirectory f)
+			, f `File.containsLines`
+				(map (\k -> hn ++ " " ++ k) (M.elems m))
+			, File.ownerGroup f user (userGroup user)
+			, File.ownerGroup (takeDirectory f) user (userGroup user)
+			]
+	go _ = do
+		warningMessage $ "no configured ssh host keys for " ++ hn
+		return FailedChange
 
--- | Reverts `knownHost`
-unknownHost :: [Host] -> HostName -> User -> Property UnixLike
-unknownHost hosts hn user@(User u) = property' desc $ \w ->
-	go w =<< knownHostLines hosts hn
-  where
-	desc = u ++ " does not know ssh key for " ++ hn
-
-	go _ [] = return NoChange
-	go w ls = do
-		f <- liftIO $ dotFile "known_hosts" user
-		ifM (liftIO $ doesFileExist f)
-			( ensureProperty w $ modKnownHost user f $
-				f `File.lacksLines` ls
-			, return NoChange
-			)
-
-knownHostLines :: [Host] -> HostName -> Propellor [File.Line]
-knownHostLines hosts hn = keylines <$> fromHost hosts hn getHostPubKey
-  where
-	keylines (Just m) = map (\k -> hn ++ " " ++ k) (M.elems m)
-	keylines Nothing = []
-
-modKnownHost :: User -> FilePath -> Property UnixLike -> Property UnixLike
-modKnownHost user f p = p
-	`before` File.ownerGroup f user (userGroup user)
-	`before` File.ownerGroup (takeDirectory f) user (userGroup user)
-
--- | Ensures that a local user's authorized_keys contains lines allowing
+-- | Ensures that a local user's authorized keys contains a line allowing
 -- logins from a remote user on the specified Host.
 --
--- The ssh keys of the remote user can be set using `userKeys`
+-- The ssh keys of the remote user can be set using `keysImported`
 --
 -- Any other lines in the authorized_keys file are preserved as-is.
-authorizedKeysFrom :: User -> (User, Host) -> Property UnixLike
-localuser@(User ln) `authorizedKeysFrom` (remoteuser@(User rn), remotehost) =
-	property' desc (\w -> go w =<< authorizedKeyLines remoteuser remotehost)
+authorizedKeysFrom :: User -> (User, Host) -> Property NoInfo
+localuser@(User ln) `authorizedKeysFrom` (remoteuser@(User rn), remotehost) = 
+	property desc $ go =<< fromHost' remotehost (getUserPubKeys remoteuser)
   where
 	remote = rn ++ "@" ++ hostName remotehost
 	desc = ln ++ " authorized_keys from " ++ remote
-
-	go _ [] = do
+	go [] = do
 		warningMessage $ "no configured ssh user keys for " ++ remote
 		return FailedChange
-	go w ls = ensureProperty w $ combineProperties desc $ toProps $
-		map (setupRevertableProperty . authorizedKey localuser) ls
-
--- | Reverts `authorizedKeysFrom`
-unauthorizedKeysFrom :: User -> (User, Host) -> Property UnixLike
-localuser@(User ln) `unauthorizedKeysFrom` (remoteuser@(User rn), remotehost) =
-	property' desc (\w -> go w =<< authorizedKeyLines remoteuser remotehost)
-  where
-	remote = rn ++ "@" ++ hostName remotehost
-	desc = ln ++ " unauthorized_keys from " ++ remote
-
-	go _ [] = return NoChange
-	go w ls = ensureProperty w $ combineProperties desc $ toProps $
-		map (undoRevertableProperty . authorizedKey localuser) ls
-
-authorizedKeyLines :: User -> Host -> Propellor [File.Line]
-authorizedKeyLines remoteuser remotehost =
-	map snd <$> fromHost' remotehost (getUserPubKeys remoteuser)
+	go ks = ensureProperty $ propertyList desc $
+		map (authorizedKey localuser . snd) ks
 
 -- | Makes a user have authorized_keys from the PrivData
 --
@@ -401,33 +367,15 @@ authorizedKeys :: IsContext c => User -> c -> Property (HasInfo + UnixLike)
 authorizedKeys user@(User u) context = withPrivData (SshAuthorizedKeys u) context $ \get ->
 	property' desc $ \w -> get $ \v -> do
 		f <- liftIO $ dotFile "authorized_keys" user
-		ensureProperty w $ combineProperties desc $ props
-			& File.hasContentProtected f (keyFileContent (privDataLines v))
-			& File.ownerGroup f user (userGroup user)
-			& File.ownerGroup (takeDirectory f) user (userGroup user)
-  where
-	desc = u ++ " has authorized_keys"
+		ensureProperties 
+			[ File.hasContentProtected f (keyFileContent (privDataLines v))
+			, File.ownerGroup f user (userGroup user)
+			, File.ownerGroup (takeDirectory f) user (userGroup user)
+			] 
 
 -- | Ensures that a user's authorized_keys contains a line.
 -- Any other lines in the file are preserved as-is.
 authorizedKey :: User -> String -> RevertableProperty UnixLike UnixLike
 authorizedKey user@(User u) l = add <!> remove
   where
-	add = property' (u ++ " has authorized_keys") $ \w -> do
-		f <- liftIO $ dotFile "authorized_keys" user
-		ensureProperty w $ modAuthorizedKey f user $
-			f `File.containsLine` l
-				`requires` File.dirExists (takeDirectory f)
-	remove = property' (u ++ " lacks authorized_keys") $ \w -> do
-		f <- liftIO $ dotFile "authorized_keys" user
-		ifM (liftIO $ doesFileExist f)
-			( ensureProperty w $ modAuthorizedKey f user $
-				f `File.lacksLine` l
-			, return NoChange
-			)
-
-modAuthorizedKey :: FilePath -> User -> Property UnixLike -> Property UnixLike
-modAuthorizedKey f user p = p
-	`before` File.mode f (combineModes [ownerWriteMode, ownerReadMode])
-	`before` File.ownerGroup f user (userGroup user)
-	`before` File.ownerGroup (takeDirectory f) user (userGroup user)
+	desc = u ++ " has autorized_keys"
