@@ -301,7 +301,7 @@ userKeyAt dest user@(User u) context (keytype, pubkeytext) =
 			install File.hasContentProtected "" . privDataLines
 	install writer ext key = do
 		f <- liftIO $ keyfile ext
-		ensureProperties
+		ensureProperty $ combineProperties desc
 			[ writer f (keyFileContent key)
 			, File.ownerGroup f user (userGroup user)
 			, File.ownerGroup (takeDirectory f) user (userGroup user)
@@ -365,17 +365,19 @@ localuser@(User ln) `authorizedKeysFrom` (remoteuser@(User rn), remotehost) =
 -- This removes any other lines from the file.
 authorizedKeys :: IsContext c => User -> c -> Property (HasInfo + UnixLike)
 authorizedKeys user@(User u) context = withPrivData (SshAuthorizedKeys u) context $ \get ->
-	property' desc $ \w -> get $ \v -> do
+	property desc $ get $ \v -> do
 		f <- liftIO $ dotFile "authorized_keys" user
-		ensureProperties 
+		ensureProperty $ combineProperties desc
 			[ File.hasContentProtected f (keyFileContent (privDataLines v))
 			, File.ownerGroup f user (userGroup user)
 			, File.ownerGroup (takeDirectory f) user (userGroup user)
-			] 
+			]
+  where
+	desc = u ++ " has authorized_keys"
 
 -- | Ensures that a user's authorized_keys contains a line.
 -- Any other lines in the file are preserved as-is.
 authorizedKey :: User -> String -> RevertableProperty UnixLike UnixLike
 authorizedKey user@(User u) l = add <!> remove
   where
-	desc = u ++ " has autorized_keys"
+	desc = u ++ " has authorized_keys"
