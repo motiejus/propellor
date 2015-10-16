@@ -19,11 +19,6 @@ appEnabled an cf = enable <!> disable
 		`requires` appAvailable an cf
 		`requires` installed
 		`onChange` reloaded
-	  where
-		test = not <$> doesFileExist (appVal an)
-		prop = dir `File.isSymlinkedTo` target
-		target = appValRelativeCfg an
-		dir = appVal an
 	disable = trivial $ File.notPresent (appVal an)
 		`describe` ("uwsgi app disable" ++ an)
 		`requires` installed
@@ -42,7 +37,7 @@ appVal :: AppName -> FilePath
 appVal an = "/etc/uwsgi/apps-enabled/" </> an <.> "ini"
 
 appValRelativeCfg :: AppName -> File.LinkTarget
-appValRelativeCfg an = File.LinkTarget $ "../apps-available" </> an <.> "ini"
+appValRelativeCfg an = File.LinkTarget $ "../apps-available/" ++ an
 
 installed :: Property DebianLike
 installed = Apt.installed ["uwsgi"]

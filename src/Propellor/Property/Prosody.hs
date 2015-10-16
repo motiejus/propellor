@@ -20,13 +20,11 @@ confEnabled conf cf = enable <!> disable
 		`requires` installed
 		`onChange` reloaded
 	  where
-		test = not <$> doesFileExist (confValPath conf)
-		prop = dir `File.isSymlinkedTo` target
 		target = confValRelativePath conf
 		dir = confValPath conf
 		confValRelativePath conf' = File.LinkTarget $
 			"../conf.avail" </> conf' <.> "cfg.lua"
-	disable = File.notPresent (confValPath conf)
+	disable = trivial $ File.notPresent (confValPath conf)
 		`describe` ("prosody conf disabled " ++ conf)
 		`requires` installed
 		`onChange` reloaded

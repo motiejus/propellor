@@ -17,11 +17,6 @@ siteEnabled hn cf = enable <!> disable
 		`requires` siteAvailable hn cf
 		`requires` installed
 		`onChange` reloaded
-	  where
-		test = not <$> doesFileExist (siteVal hn)
-		prop = dir `File.isSymlinkedTo` target
-		target = siteValRelativeCfg hn
-		dir = siteVal hn
 	disable = trivial $ File.notPresent (siteVal hn)
 		`describe` ("nginx site disable" ++ hn)
 		`requires` installed
