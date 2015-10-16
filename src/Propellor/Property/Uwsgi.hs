@@ -19,7 +19,12 @@ appEnabled an cf = enable <!> disable
 		`requires` appAvailable an cf
 		`requires` installed
 		`onChange` reloaded
-	disable = File.notPresent (appVal an)
+	  where
+		test = not <$> doesFileExist (appVal an)
+		prop = dir `File.isSymlinkedTo` target
+		target = appValRelativeCfg an
+		dir = appVal an
+	disable = trivial $ File.notPresent (appVal an)
 		`describe` ("uwsgi app disable" ++ an)
 		`requires` installed
 		`onChange` reloaded

@@ -99,7 +99,8 @@ oldUseNetServer hosts = propertyList "olduse.net server" $ props
 	& Apt.installed ["leafnode"]
 	& oldUseNetInstalled "oldusenet-server"
 	& oldUseNetBackup
-	& spoolsymlink
+	& check (not . isSymbolicLink <$> getSymbolicLinkStatus newsspool)
+		(newsspool `File.isSymlinkedTo` (datadir </> "news"))
 	& "/etc/news/leafnode/config" `File.hasContent`
 		[ "# olduse.net configuration (deployed by propellor)"
 		, "expire = 1000000" -- no expiry via texpire
@@ -291,7 +292,6 @@ annexWebSite origin hn uuid remotes = propertyList (hn ++" website using git-ann
 	dir = "/srv/web/" ++ hn
 	postupdatehook = dir </> ".git/hooks/post-update"
 	setup = userScriptProperty (User "joey") setupscript
-		`assume` MadeChange
 	setupscript =
 		[ "cd " ++ shellEscape dir
 		, "git annex reinit " ++ shellEscape uuid
@@ -315,29 +315,44 @@ annexWebSite origin hn uuid remotes = propertyList (hn ++" website using git-ann
 letos :: LetsEncrypt.AgreeTOS
 letos = LetsEncrypt.AgreeTOS (Just "id@joeyh.name")
 
-apacheSite :: HostName -> Apache.ConfigFile -> RevertableProperty DebianLike DebianLike
-apacheSite hn middle = Apache.siteEnabled hn $ apachecfg hn middle
-
-apachecfg :: HostName -> Apache.ConfigFile -> Apache.ConfigFile
-apachecfg hn middle =
-	[ "<VirtualHost *:" ++ val port ++ ">"
-	, "  ServerAdmin grue@joeyh.name"
-	, "  ServerName "++hn++":" ++ val port
-	]
-	++ middle ++
-	[ ""
-	, "  ErrorLog /var/log/apache2/error.log"
-	, "  LogLevel warn"
-	, "  CustomLog /var/log/apache2/access.log combined"
-	, "  ServerSignature On"
-	, "  "
-	, Apache.iconDir
-	, "</VirtualHost>"
-	]
+apachecfg :: HostName -> Bool -> Apache.ConfigFile -> Apache.ConfigFile
+apachecfg hn withssl middle
+	| withssl = vhost False ++ vhost True
+	| otherwise = vhost False
+  where
+	vhost ssl =
+		[ "<VirtualHost *:"++show port++">"
+		, "  ServerAdmin grue@joeyh.name"
+		, "  ServerName "++hn++":"++show port
+		]
+		++ mainhttpscert ssl
+		++ middle ++
+		[ ""
+		, "  ErrorLog /var/log/apache2/error.log"
+		, "  LogLevel warn"
+		, "  CustomLog /var/log/apache2/access.log combined"
+		, "  ServerSignature On"
+		, "  "
+		, "  <Directory \"/usr/share/apache2/icons\">"
+		, "      Options Indexes MultiViews"
+		, "      AllowOverride None"
+		, Apache.allowAll
+		, "  </Directory>"
+		, "</VirtualHost>"
+		]
 	  where
-		port = Port 80
+		port = if ssl then 443 else 80 :: Int
 
-gitAnnexDistributor :: Property (HasInfo + DebianLike)
+mainhttpscert :: Bool -> Apache.ConfigFile
+mainhttpscert False = []
+mainhttpscert True =
+	[ "  SSLEngine on"
+	, "  SSLCertificateFile /etc/ssl/certs/web.pem"
+	, "  SSLCertificateKeyFile /etc/ssl/private/web.pem"
+	, "  SSLCertificateChainFile /etc/ssl/certs/startssl.pem"
+	]
+
+gitAnnexDistributor :: Property HasInfo
 gitAnnexDistributor = combineProperties "git-annex distributor, including rsync server and signer" $ props
 	& Apt.installed ["rsync"]
 	& File.hasPrivContent "/etc/rsyncd.conf" (Context "git-annex distributor")
@@ -364,13 +379,35 @@ downloads hosts = annexWebSite "/srv/git/downloads.git"
 	[("eubackup", "ssh://eubackup.kitenet.net/~/lib/downloads/")]
 	`requires` Ssh.knownHost hosts "eubackup.kitenet.net" (User "joey")
 
-tmp :: Property (HasInfo + DebianLike)
-tmp = propertyList "tmp.joeyh.name" $ props
+tmp :: Property HasInfo
+tmp = propertyList "tmp.kitenet.net" $ props
 	& annexWebSite "/srv/git/joey/tmp.git"
 		"tmp.joeyh.name"
 		"26fd6e38-1226-11e2-a75f-ff007033bdba"
 		[]
 	& pumpRss
+
+-- Twitter, you kill us.
+twitRss :: Property HasInfo
+twitRss = combineProperties "twitter rss" $ props
+	& Git.cloned (User "joey") "git://git.kitenet.net/twitrss.git" dir Nothing
+	& check (not <$> doesFileExist (dir </> "twitRss")) compiled
+	& feed "http://twitter.com/search/realtime?q=git-annex" "git-annex-twitter"
+	& feed "http://twitter.com/search/realtime?q=olduse+OR+git-annex+OR+debhelper+OR+etckeeper+OR+ikiwiki+-ashley_ikiwiki" "twittergrep"
+  where
+	dir = "/srv/web/tmp.kitenet.net/twitrss"
+	crontime = Cron.Times "15 * * * *"
+	feed url desc = Cron.job desc crontime (User "joey") dir $
+		"./twitRss " ++ shellEscape url ++ " > " ++ shellEscape ("../" ++ desc ++ ".rss")
+	compiled = userScriptProperty (User "joey")
+		[ "cd " ++ dir
+		, "ghc --make twitRss"
+		]
+		`requires` Apt.installed
+			[ "libghc-xml-dev"
+			, "libghc-feed-dev"
+			, "libghc-tagsoup-dev"
+			]
 
 -- Work around for expired ssl cert.
 -- (Obsolete; need to revert this.)
@@ -419,7 +456,7 @@ githubBackup = propertyList "github-backup box" $ props
 		, "github-backup joeyh"
 		]
 
-githubKeys :: Property (HasInfo + UnixLike)
+githubKeys :: Property HasInfo
 githubKeys =
 	let f = "/home/joey/.github-keys"
 	in File.hasPrivContent f anyContext
@@ -866,7 +903,14 @@ legacyWebSites = propertyList "legacy web sites" $ props
 		, "rewriterule /~kyle/family/wiki(.*) http://macleawiki.branchable.com$1 [L]"
 		]
 
-userDirHtml :: Property DebianLike
+		, "rewritecond $1 !.*/index$"
+		, "rewriterule (.+).rss$ http://joeyh.name/$1/index.rss [l]"
+
+		, "# Redirect all to joeyh.name."
+		, "rewriterule (.*) http://joeyh.name$1 [r]"
+		]
+
+userDirHtml :: Property HasInfo
 userDirHtml = File.fileProperty "apache userdir is html" (map munge) conf
 	`onChange` Apache.reloaded
 	`requires` Apache.modEnabled "userdir"

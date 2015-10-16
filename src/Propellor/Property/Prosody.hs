@@ -20,6 +20,8 @@ confEnabled conf cf = enable <!> disable
 		`requires` installed
 		`onChange` reloaded
 	  where
+		test = not <$> doesFileExist (confValPath conf)
+		prop = dir `File.isSymlinkedTo` target
 		target = confValRelativePath conf
 		dir = confValPath conf
 		confValRelativePath conf' = File.LinkTarget $
