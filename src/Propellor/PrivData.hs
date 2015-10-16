@@ -243,7 +243,7 @@ mkUsedByMap = M.unionsWith (++) . map (\h -> mkPrivDataMap h $ const [hostName h
 mkPrivDataMap :: Host -> (Maybe PrivDataSourceDesc -> a) -> M.Map (PrivDataField, Context) a
 mkPrivDataMap host mkv = M.fromList $
 	map (\(f, d, c) -> ((f, mkHostContext c (hostName host)), mkv d))
-		(S.toList $ fromPrivInfo $ fromInfo $ hostInfo host)
+		(S.toList $ fromPrivInfo $ getInfo $ hostInfo host)
 
 setPrivDataTo :: PrivDataField -> Context -> PrivData -> IO ()
 setPrivDataTo field context (PrivData value) = do
@@ -260,9 +260,8 @@ modifyPrivData' f = do
 	makePrivDataDir
 	m <- decryptPrivData
 	let (m', r) = f m
-	privdata <- privDataFile
-	gpgEncrypt privdata (show m')
-	void $ boolSystem "git" [Param "add", File privdata]
+	gpgEncrypt privDataFile (show m')
+	void $ boolSystem "git" [Param "add", File privDataFile]
 	return r
 
 decryptPrivData :: IO PrivMap
