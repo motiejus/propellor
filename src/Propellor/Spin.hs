@@ -64,11 +64,8 @@ commitSpin = do
 		void $ actionMessage "Push to central git repository" $
 			boolSystemNonConcurrent "git" [Param "push"]
 
-spin :: Maybe HostName -> HostName -> Host -> IO ()
-spin = spin' Nothing
-
-spin' :: Maybe PrivMap -> Maybe HostName -> HostName -> Host -> IO ()
-spin' mprivdata relay target hst = do
+spin :: HostName -> Maybe HostName -> ControllerChain -> Host -> IO ()
+spin target relay cc hst = do
 	cacheparams <- if viarelay
 		then pure ["-A"]
 		else toCommand <$> sshCachingParams hn
@@ -118,21 +115,11 @@ spin' mprivdata relay target hst = do
 		]
 
 	runcmd = "cd " ++ localdir ++ " && ./propellor " ++ cmd
-	cmd = "--serialized " ++ shellEscape (show cmdline)
-	cmdline
-		| viarelay = Spin [target] (Just target)
-		| otherwise = SimpleRun target
-
-	getprivdata = case mprivdata of
-		Nothing
-			| relaying -> do
-				let f = privDataRelay hn
-				d <- readPrivDataFile f
-				nukeFile f
-				return d
-			| otherwise ->
-				filterPrivData hst <$> decryptPrivData
-		Just pd -> pure pd
+	cmd = if viarelay
+		then "--serialized " ++ shellEscape (show (Spin [target] (Just target)))
+		else if cc == mempty
+			then "--continue " ++ shellEscape (show (SimpleRun target))
+			else "--continue " ++ shellEscape (show (ControlledRun target cc))
 
 -- Check if the Host contains an IP address that matches one of the IPs
 -- in the DNS for the HostName. If so, the HostName is used as-is,

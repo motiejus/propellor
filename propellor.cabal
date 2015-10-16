@@ -118,10 +118,8 @@ Library
     Propellor.Property.Grub
     Propellor.Property.Journald
     Propellor.Property.Kerberos
-    Propellor.Property.LetsEncrypt
     Propellor.Property.List
     Propellor.Property.LightDM
-    Propellor.Property.Locale
     Propellor.Property.Logcheck
     Propellor.Property.Mount
     Propellor.Property.Network
@@ -138,7 +136,7 @@ Library
     Propellor.Property.Reboot
     Propellor.Property.Restic
     Propellor.Property.Rsync
-    Propellor.Property.Sbuild
+    Propellor.Property.Spin
     Propellor.Property.Scheduled
     Propellor.Property.Schroot
     Propellor.Property.Service

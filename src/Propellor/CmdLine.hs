@@ -138,12 +138,19 @@ defaultMain hostlist = withConcurrentOutput $ do
 		fetchFirst (onlyprocess (update Nothing))
 	go _ (Update (Just h)) = update (Just h)
 	go _ Merge = mergeSpin
-	go cr cmdline@(Spin hs mrelay) = buildFirst Nothing cr cmdline $ do
-		unless (isJust mrelay) commitSpin
-		forM_ hs $ \hn -> withhost hn $ spin mrelay hn
-	go cr cmdline@(Run hn) = ifM ((==) 0 <$> getRealUserID)
-		( updateFirst (findHost hostlist hn) cr cmdline $ runhost hn
-		, fetchFirst $ go cr (Spin [hn] Nothing)
+	go True cmdline@(Spin _ _) = buildFirst cmdline $ go False cmdline
+	go True cmdline = updateFirst cmdline $ go False cmdline
+	go False (Spin hs r) = do
+		commitSpin
+		forM_ hs $ \hn -> withhost hn $
+			spin hn r mempty
+	go False cmdline@(SimpleRun hn) = buildFirst cmdline $
+		go False (Run hn)
+	go False cmdline@(ControlledRun hn cc) = buildFirst cmdline $
+		onlyprocess $ withhost hn $ mainProperties cc
+	go False (Run hn) = ifM ((==) 0 <$> getRealUserID)
+		( onlyprocess $ withhost hn $ mainProperties mempty
+		, go True (Spin [hn] Nothing)
 		)
 	go cr cmdline@(SimpleRun hn) = forceConsole >>
 		fetchFirst (buildFirst (findHost hostlist hn) cr cmdline (runhost hn))
