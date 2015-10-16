@@ -18,6 +18,22 @@ hosts =
 
 -- An example host.
 mybox :: Host
+mybox = host "mybox.example.com"
+	& os (System (Debian Unstable) "amd64")
+	& Apt.stdSourcesList
+	& Apt.unattendedUpgrades
+	& Apt.installed ["etckeeper"]
+	& Apt.installed ["ssh"]
+	& User.hasSomePassword (User "root")
+	& Network.ipv6to4
+	& File.dirExists "/var/www"
+	& Docker.docked webserverContainer
+	& Docker.garbageCollected `period` Daily
+	& Cron.runPropellor (Cron.Times "30 * * * *")
+	]
+
+-- An example host.
+mybox :: Host
 mybox = host "mybox.example.com" $ props
 	& osDebian Unstable X86_64
 	& Apt.stdSourcesList
