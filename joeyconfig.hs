@@ -30,6 +30,7 @@ import qualified Propellor.Property.Chroot as Chroot
 import qualified Propellor.Property.Fail2Ban as Fail2Ban
 import qualified Propellor.Property.Aiccu as Aiccu
 import qualified Propellor.Property.OS as OS
+import qualified Propellor.Property.Spin as Spin
 import qualified Propellor.Property.HostingProvider.CloudAtCost as CloudAtCost
 import qualified Propellor.Property.HostingProvider.Linode as Linode
 import qualified Propellor.Property.HostingProvider.DigitalOcean as DigitalOcean
@@ -263,8 +264,9 @@ honeybee = host "honeybee.kitenet.net" $ props
 -- multiuser system with eg, user passwords that are not deployed
 -- with propellor.
 kite :: Host
-kite = host "kite.kitenet.net" $ props
-	& standardSystemUnhardened Testing X86_64 [ "Welcome to kite!" ]
+kite = standardSystemUnhardened "kite.kitenet.net" Testing "amd64"
+	[ "Welcome to kite!" ]
+	& Spin.controllerFor clam
 	& ipv4 "66.228.36.95"
 	& ipv6 "2600:3c03::f03c:91ff:fe73:b0d2"
 	& alias "kitenet.net"
