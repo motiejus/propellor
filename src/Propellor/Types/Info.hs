@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
 
 module Propellor.Types.Info (
 	Info(..),
@@ -20,22 +20,11 @@ import Data.Monoid
 import Prelude
 
 -- | Information about a Host, which can be provided by its properties.
---
--- Many different types of data can be contained in the same Info value
--- at the same time. See `toInfo` and `fromInfo`.
-newtype Info = Info [InfoEntry]
-	deriving (Monoid, Show)
-
-data InfoEntry where
-	InfoEntry :: (IsInfo v, Typeable v) => v -> InfoEntry
+newtype Info = Info [(Dynamic, Bool)]
+	deriving (Monoid)
 
 instance Show InfoEntry where
 	show (InfoEntry v) = show v
-
--- Extracts the value from an InfoEntry but only when
--- it's of the requested type.
-extractInfoEntry :: Typeable v => InfoEntry -> Maybe v
-extractInfoEntry (InfoEntry v) = cast v
 
 -- | Values stored in Info must be members of this class.
 --
@@ -63,8 +52,8 @@ toInfo :: IsInfo v => v -> Info
 toInfo = addInfo mempty
 
 -- The list is reversed here because addInfo builds it up in reverse order.
-fromInfo :: IsInfo v => Info -> v
-fromInfo (Info l) = mconcat (mapMaybe extractInfoEntry (reverse l))
+getInfo :: IsInfo v => Info -> v
+getInfo (Info l) = mconcat (mapMaybe (fromDynamic . fst) (reverse l))
 
 -- | Maps a function over all values stored in the Info that are of the
 -- appropriate type.
