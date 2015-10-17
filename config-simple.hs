@@ -30,7 +30,6 @@ mybox = host "mybox.example.com"
 	& Docker.docked webserverContainer
 	& Docker.garbageCollected `period` Daily
 	& Cron.runPropellor (Cron.Times "30 * * * *")
-	]
 
 -- An example host.
 mybox :: Host
