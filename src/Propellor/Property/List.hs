@@ -32,14 +32,30 @@ toProps ps = Props (map toChildProperty ps)
 -- For example:
 --
 -- > propertyList "foo" $ props
--- > 	& bar
--- > 	& baz
-propertyList :: SingI metatypes => Desc -> Props (MetaTypes metatypes) -> Property (MetaTypes metatypes)
-propertyList desc (Props ps) = 
-	property desc (ensureChildProperties cs)
-		`addChildren` cs
-  where
-	cs = map toChildProperty ps
+-- > 	& someproperty
+-- > 	! oldproperty
+-- > 	& otherproperty
+props :: PropList
+props = PropList []
+
+data PropList = PropList [Property HasInfo]
+
+instance PropAccum PropList where
+	PropList l `addProp` p = PropList (toProp p : l)
+	PropList l `addPropFront` p = PropList (l ++ [toProp p])
+	getProperties (PropList l) = reverse l
+
+class PropertyList l where
+	-- | Combines a list of properties, resulting in a single property
+	-- that when run will run each property in the list in turn,
+	-- and print out the description of each as it's run. Does not stop
+	-- on failure; does propagate overall success/failure.
+	--
+	-- Note that Property HasInfo and Property NoInfo are not the same
+	-- type, and so cannot be mixed in a list. To make a list of
+	-- mixed types, which can also include RevertableProperty,
+	-- use `props`
+	propertyList :: Desc -> l -> Property (PropertyListType l)
 
 -- | Combines a list of properties, resulting in one property that
 -- ensures each in turn. Stops if a property fails.

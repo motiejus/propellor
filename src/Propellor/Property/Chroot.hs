@@ -129,8 +129,8 @@ bootstrapped bootstrapper location ps = c
 -- Reverting this property removes the chroot. Anything mounted inside it
 -- is first unmounted. Note that it does not ensure that any processes
 -- that might be running inside the chroot are stopped.
-provisioned :: Chroot -> RevertableProperty (HasInfo + Linux) Linux
-provisioned c = provisioned' c False
+provisioned :: Chroot -> RevertableProperty
+provisioned c = provisioned' (propagateChrootInfo c) c False
 
 provisioned'
 	:: Chroot
@@ -151,17 +151,14 @@ provisioned' c@(Chroot loc bootstrapper infopropigator _) systemdonly =
 
 	cantbuild e = property (chrootDesc c "built") (error e)
 
-	teardown :: Property Linux
-	teardown = check (not <$> unpopulated loc) $
-		property ("removed " ++ loc) $
-			makeChange (removeChroot loc)
-
-type InfoPropagator = Chroot -> (PropagateInfo -> Bool) -> Property Linux -> Property (HasInfo + Linux)
-
-propagateChrootInfo :: InfoPropagator
-propagateChrootInfo c@(Chroot location _ _ _) pinfo p =
-	propagateContainer location c pinfo $
-		p `setInfoProperty` chrootInfo c
+propagateChrootInfo :: (IsProp (Property i)) => Chroot -> Property i -> Property HasInfo
+propagateChrootInfo c@(Chroot location _ _ _) p = propagateContainer location c p'
+  where
+	p' = infoProperty
+		(propertyDesc p)
+		(propertySatisfy p)
+		(propertyInfo p <> chrootInfo c)
+		(propertyChildren p)
 
 chrootInfo :: Chroot -> Info
 chrootInfo (Chroot loc _ _ h) = mempty `addInfo`

@@ -31,25 +31,14 @@ instance Show InfoEntry where
 -- This is used to avoid accidentially using other data types
 -- as info, especially type aliases which coud easily lead to bugs.
 -- We want a little bit of dynamic types here, but not too far..
-class (Typeable v, Monoid v, Show v) => IsInfo v where
+class (Typeable v, Monoid v) => IsInfo v where
 	-- | Should info of this type be propagated out of a
 	-- container to its Host?
-	propagateInfo :: v -> PropagateInfo
-
-data PropagateInfo
-	= PropagateInfo Bool
-	| PropagatePrivData
-	-- ^ Info about PrivData generally will be propigated even in cases
-	-- where other Info is not, so it treated specially.
+	propagateInfo :: v -> Bool
 
 -- | Any value in the `IsInfo` type class can be added to an Info.
 addInfo :: IsInfo v => Info -> v -> Info
-addInfo (Info l) v = Info (InfoEntry v:l)
-
--- | Converts any value in the `IsInfo` type class into an Info,
--- which is otherwise empty.
-toInfo :: IsInfo v => v -> Info
-toInfo = addInfo mempty
+addInfo (Info l) v = Info ((toDyn v, propagateInfo v):l)
 
 -- The list is reversed here because addInfo builds it up in reverse order.
 getInfo :: IsInfo v => Info -> v
@@ -60,9 +49,14 @@ getInfo (Info l) = mconcat (mapMaybe (fromDynamic . fst) (reverse l))
 mapInfo :: IsInfo v => (v -> v) -> Info -> Info
 mapInfo f (Info l) = Info (map go l)
   where
-	go i = case extractInfoEntry i of
-		Nothing -> i
-		Just v -> InfoEntry (f v)
+	go (i, p) = case fromDynamic i of
+		Nothing -> (i, p)
+		Just v -> (toDyn (f v), p)
+
+-- | Filters out parts of the Info that should not propagate out of a
+-- container.
+propigatableInfo :: Info -> Info
+propigatableInfo (Info l) = Info (filter snd l)
 
 -- | Use this to put a value in Info that is not a monoid.
 -- The last value set will be used. This info does not propagate
@@ -75,8 +69,8 @@ instance Monoid (InfoVal v) where
 	mappend _ v@(InfoVal _) = v
 	mappend v NoInfoVal = v
 
-instance (Typeable v, Show v) => IsInfo (InfoVal v) where
-	propagateInfo _ = PropagateInfo False
+instance Typeable v => IsInfo (InfoVal v) where
+	propagateInfo _ = False
 
 fromInfoVal :: InfoVal v -> Maybe v
 fromInfoVal NoInfoVal = Nothing

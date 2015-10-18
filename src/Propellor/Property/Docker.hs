@@ -183,10 +183,8 @@ imagePulled ctr = pulled `describe` msg
 			`assume` MadeChange
 	image = getImageName ctr
 
-propagateContainerInfo :: Container -> Property (HasInfo + Linux) -> Property (HasInfo + Linux)
-propagateContainerInfo ctr@(Container _ h) p = 
-	propagateContainer cn ctr normalContainerInfo $
-		p `addInfoProperty` dockerinfo
+propagateContainerInfo :: (IsProp (Property i)) => Container -> Property i -> Property HasInfo
+propagateContainerInfo ctr@(Container _ h) p = propagateContainer cn ctr p'
   where
 	dockerinfo = dockerInfo $
 		mempty { _dockerContainers = M.singleton cn h }
