@@ -30,7 +30,6 @@ import qualified Propellor.Property.Chroot as Chroot
 import qualified Propellor.Property.Fail2Ban as Fail2Ban
 import qualified Propellor.Property.Aiccu as Aiccu
 import qualified Propellor.Property.OS as OS
-import qualified Propellor.Property.Spin as Spin
 import qualified Propellor.Property.HostingProvider.CloudAtCost as CloudAtCost
 import qualified Propellor.Property.HostingProvider.Linode as Linode
 import qualified Propellor.Property.HostingProvider.DigitalOcean as DigitalOcean
@@ -85,7 +84,6 @@ darkstar :: Host
 darkstar = host "darkstar.kitenet.net" $ props
 	& osDebian Unstable X86_64
 	& ipv6 "2001:4830:1600:187::2"
-	& Spin.controllerFor clam
 	& Aiccu.hasConfig "T18376" "JHZ2-SIXXS"
 
 	& Apt.buildDep ["git-annex"] `period` Daily
