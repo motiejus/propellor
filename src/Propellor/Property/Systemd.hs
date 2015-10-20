@@ -245,8 +245,8 @@ container name mkchroot =
 --
 -- Reverting this property stops the container, removes the systemd unit,
 -- and deletes the chroot and all its contents.
-nspawned :: Container -> RevertableProperty (HasInfo + Linux) Linux
-nspawned c@(Container name (Chroot.Chroot loc builder _ _) h) =
+nspawned :: Container -> RevertableProperty
+nspawned c@(Container name (Chroot.Chroot loc system builder _) h) =
 	p `describe` ("nspawned " ++ name)
   where
 	p :: RevertableProperty (HasInfo + Linux) Linux
@@ -268,7 +268,7 @@ nspawned c@(Container name (Chroot.Chroot loc builder _ _) h) =
 			<!>
 		doNothing
 
-	chroot = Chroot.Chroot loc builder Chroot.propagateChrootInfo h
+	chroot = Chroot.Chroot loc system builder h
 
 -- | Sets up the service file for the container, and then starts
 -- it running.
