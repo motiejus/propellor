@@ -227,22 +227,9 @@ container name mkchroot =
 		&^ resolvConfed
 		&^ linkJournal
   where
-	chroot = mkchroot (containerDir name)
-	h = Host name (containerProperties chroot) (containerInfo chroot)
-
--- | Defines a container with a given machine name, with the chroot
--- created using debootstrap.
---
--- Properties can be added to configure the Container. At a minimum,
--- add a property such as `osDebian` to specify the operating system
--- to bootstrap.
---
--- > debContainer "webserver" $ props
--- >	& osDebian Unstable X86_64
--- >    & Apt.installedRunning "apache2"
--- >    & ...
-debContainer :: MachineName -> Props metatypes -> Container
-debContainer name ps = container name $ \d -> Chroot.debootstrapped mempty d ps
+	c = mkchroot (containerDir name)
+	system = Chroot.chrootSystem c
+	h = Host name [] mempty
 
 -- | Runs a container using systemd-nspawn.
 --

@@ -1,6 +1,9 @@
-{-# LANGUAGE FlexibleContexts, GADTs, DeriveDataTypeable #-}
+{-# LANGUAGE FlexibleContexts, GADTs #-}
 
 module Propellor.Property.Chroot (
+	Chroot(..),
+	ChrootBootstrapper(..),
+	Debootstrapped(..),
 	debootstrapped,
 	bootstrapped,
 	provisioned,
@@ -51,27 +54,14 @@ instance IsContainer Chroot where
 		let h' = setContainerProperties h ps
 		in Chroot loc b p h'
 
-chrootSystem :: Chroot -> Maybe System
-chrootSystem = fromInfoVal . fromInfo . containerInfo
+data Chroot where
+	Chroot :: ChrootBootstrapper b => FilePath -> System -> b -> Host -> Chroot
+
+chrootSystem :: Chroot -> System
+chrootSystem (Chroot _ system _ _) = system
 
 instance Show Chroot where
-	show c@(Chroot loc _ _ _) = "Chroot " ++ loc ++ " " ++ show (chrootSystem c)
-
--- | Class of things that can do initial bootstrapping of an operating
--- System in a chroot.
-class ChrootBootstrapper b where
-	-- | Do initial bootstrapping of an operating system in a chroot.
-	-- If the operating System is not supported, return
-	-- Left error message.
-	buildchroot :: b -> Maybe System -> FilePath -> Either String (Property Linux)
-
--- | Use this to bootstrap a chroot by extracting a tarball.
---
--- The tarball is expected to contain a root directory (no top-level
--- directory, also known as a "tarbomb").
--- It may be optionally compressed with any format `tar` knows how to
--- detect automatically.
-data ChrootTarball = ChrootTarball FilePath
+	show (Chroot loc system _ _) = "Chroot " ++ loc ++ " " ++ show system
 
 instance ChrootBootstrapper ChrootTarball where
 	buildchroot (ChrootTarball tb) _ loc = Right $
@@ -103,6 +93,23 @@ instance ChrootBootstrapper Debootstrapped where
 	  where
 		debootstrap s = Debootstrap.built loc s cf
 
+-- | Class of things that can do initial bootstrapping of an operating
+-- System in a chroot.
+class ChrootBootstrapper b where
+	-- Do initial bootstrapping of an operating system in a chroot.
+	-- If the operating System is not supported, return Nothing.
+	buildchroot :: b -> System -> FilePath -> Maybe (Property HasInfo)
+
+-- | Use to bootstrap a chroot with debootstrap.
+data Debootstrapped = Debootstrapped Debootstrap.DebootstrapConfig
+
+instance ChrootBootstrapper Debootstrapped where
+	buildchroot (Debootstrapped cf) system loc = case system of
+		(System (Debian _) _) -> Just debootstrap
+		(System (Ubuntu _) _) -> Just debootstrap
+	  where
+		debootstrap = Debootstrap.built loc system cf
+
 -- | Defines a Chroot at the given location, built with debootstrap.
 --
 -- Properties can be added to configure the Chroot. At a minimum,
@@ -113,15 +120,17 @@ instance ChrootBootstrapper Debootstrapped where
 -- >	& osDebian Unstable X86_64
 -- >	& Apt.installed ["ghc", "haskell-platform"]
 -- >	& ...
-debootstrapped :: Debootstrap.DebootstrapConfig -> FilePath -> Props metatypes -> Chroot
-debootstrapped conf = bootstrapped (Debootstrapped conf)
+debootstrapped :: System -> Debootstrap.DebootstrapConfig -> FilePath -> Chroot
+debootstrapped system conf = bootstrapped system (Debootstrapped conf)
 
 -- | Defines a Chroot at the given location, bootstrapped with the
 -- specified ChrootBootstrapper.
-bootstrapped :: ChrootBootstrapper b => b -> FilePath -> Props metatypes -> Chroot
-bootstrapped bootstrapper location ps = c
+bootstrapped :: ChrootBootstrapper b => System -> b -> FilePath -> Chroot
+bootstrapped system bootstrapper location =
+	Chroot location system bootstrapper h
+		& os system
   where
-	c = Chroot location bootstrapper propagateChrootInfo (host location ps)
+	h = Host location [] mempty
 
 -- | Ensures that the chroot exists and is provisioned according to its
 -- properties.
@@ -132,24 +141,24 @@ bootstrapped bootstrapper location ps = c
 provisioned :: Chroot -> RevertableProperty
 provisioned c = provisioned' (propagateChrootInfo c) c False
 
-provisioned'
-	:: Chroot
-	-> Bool
-	-> RevertableProperty (HasInfo + Linux) Linux
-provisioned' c@(Chroot loc bootstrapper infopropigator _) systemdonly =
-	(infopropigator c normalContainerInfo $ setup `describe` chrootDesc c "exists")
+provisioned' :: (Property HasInfo -> Property HasInfo) -> Chroot -> Bool -> RevertableProperty
+provisioned' propigator c@(Chroot loc system bootstrapper _) systemdonly =
+	(propigator $ propertyList (chrootDesc c "exists") [setup])
 		<!>
-	(teardown `describe` chrootDesc c "removed")
+	(propertyList (chrootDesc c "removed") [teardown])
   where
-	setup :: Property Linux
 	setup = propellChroot c (inChrootProcess (not systemdonly) c) systemdonly
-		`requires` built
+		`requires` toProp built
+	
+	built = case buildchroot bootstrapper system loc of
+		Just p -> p
+		Nothing -> cantbuild
 
-	built = case buildchroot bootstrapper (chrootSystem c) loc of
-		Right p -> p
-		Left e -> cantbuild e
+	cantbuild = infoProperty (chrootDesc c "built") (error $ "cannot bootstrap " ++ show system ++ " using supplied ChrootBootstrapper") mempty []
 
-	cantbuild e = property (chrootDesc c "built") (error e)
+	teardown = check (not <$> unpopulated loc) $
+		property ("removed " ++ loc) $
+			makeChange (removeChroot loc)
 
 propagateChrootInfo :: (IsProp (Property i)) => Chroot -> Property i -> Property HasInfo
 propagateChrootInfo c@(Chroot location _ _ _) p = propagateContainer location c p'

@@ -47,8 +47,8 @@ toParams (c1 :+ c2) = toParams c1 <> toParams c2
 --
 -- The System can be any OS and architecture that debootstrap
 -- and the kernel support.
-built :: FilePath -> System -> DebootstrapConfig -> Property Linux
-built target system config = built' (setupRevertableProperty installed) target system config
+built :: FilePath -> System -> DebootstrapConfig -> Property HasInfo
+built target system config = built' (toProp installed) target system config
 
 built' :: Property Linux -> FilePath -> System -> DebootstrapConfig -> Property Linux
 built' installprop target system@(System _ arch) config = 
@@ -84,15 +84,6 @@ built' installprop target system@(System _ arch) config =
 		, return False
 		)
 	
-	-- May want to remove this after some appropriate length of time,
-	-- as it's a workaround for chroots set up with too tight
-	-- permissions.
-	oldpermfix :: Property Linux
-	oldpermfix = property ("fixed old chroot file mode") $ do
-		liftIO $ modifyFileMode target $
-			addModes [otherReadMode, otherExecuteMode]
-		return NoChange
-
 extractSuite :: System -> Maybe String
 extractSuite (System (Debian _ s) _) = Just $ Apt.showSuite s
 extractSuite (System (Buntish r) _) = Just r
