@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, DeriveDataTypeable, GeneralizedNewtypeDeriving, TypeFamilies #-}
+{-# LANGUAGE FlexibleInstances, DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
 
 -- | This module adds conductors to propellor. A conductor is a Host that
 -- is responsible for running propellor on other hosts
@@ -74,7 +74,6 @@ module Propellor.Property.Conductor (
 ) where
 
 import Propellor.Base
-import Propellor.Container
 import Propellor.Spin (spin')
 import Propellor.PrivData.Paths
 import Propellor.Types.Info
@@ -83,22 +82,21 @@ import qualified Propellor.Property.Ssh as Ssh
 import qualified Data.Set as S
 
 -- | Class of things that can be conducted.
---
--- There are instances for single hosts, and for lists of hosts.
--- With a list, each listed host will be conducted in turn. Failure to conduct
--- one host does not prevent conducting subsequent hosts in the list, but
--- will be propagated as an overall failure of the property.
 class Conductable c where
-	conducts :: c -> RevertableProperty (HasInfo + UnixLike) (HasInfo + UnixLike)
+	conducts :: c -> RevertableProperty
 
 instance Conductable Host where
+	-- | Conduct the specified host.
 	conducts h = conductorFor h <!> notConductorFor h
 
+-- | Each host in the list will be conducted in turn. Failure to conduct
+-- one host does not prevent conducting subsequent hosts in the list, but
+-- will be propagated as an overall failure of the property.
 instance Conductable [Host] where
 	conducts hs = 
-		propertyList desc (toProps $ map (setupRevertableProperty . conducts) hs)
+		propertyList desc (map (toProp . conducts) hs)
 			<!>
-		propertyList desc (toProps $ map (undoRevertableProperty . conducts) hs)
+		propertyList desc (map (toProp . revert . conducts) hs)
 	  where
 		desc = cdesc $ unwords $ map hostName hs
 
@@ -128,7 +126,7 @@ mkOrchestra = fromJust . go S.empty
   where
 	go seen h
 		| S.member (hostName h) seen = Nothing -- break loop
-		| otherwise = Just $ case fromInfo (hostInfo h) of
+		| otherwise = Just $ case getInfo (hostInfo h) of
 			ConductorFor [] -> Conducted h
 			ConductorFor l -> 
 				let seen' = S.insert (hostName h) seen
@@ -144,12 +142,12 @@ combineOrchestras' (Conducted h) b
 	| sameHost h (topHost b) = Just b
 	| otherwise = Nothing
 combineOrchestras' (Conductor h os) (Conductor h' os')
-	| sameHost h h' = Just $ Conductor h (concatMap combineos os')
+	| sameHost h h' = Just $ Conductor h (concatMap (combineos os) os')
   where
-	combineos o = case mapMaybe (`combineOrchestras` o) os of
+	combineos os o = case mapMaybe (`combineOrchestras` o) os of
 		[] -> [o]
-		os'' -> os''
-combineOrchestras' a@(Conductor h _) (Conducted h')
+		os' -> os'
+combineOrchestras' a@(Conductor h os) (Conducted h')
 	| sameHost h h' = Just a
 combineOrchestras' (Conductor h os) b
 	| null (catMaybes (map snd osgrafts)) = Nothing
@@ -166,7 +164,7 @@ sameHost a b = hostName a == hostName b
 -- one seen.
 deloop :: Host -> Orchestra -> Orchestra
 deloop _ (Conducted h) = Conducted h
-deloop thehost (Conductor htop ostop) = Conductor htop $
+deloop thehost c@(Conductor htop ostop) = Conductor htop $
 	fst $ seekh [] ostop (sameHost htop thehost)
   where
 	seekh l [] seen = (l, seen)
@@ -215,29 +213,17 @@ extractOrchestras = filter fullOrchestra . go [] . map mkOrchestra
 orchestrate :: [Host] -> [Host]
 orchestrate hs = map go hs
   where
-	go h
-		| isOrchestrated (fromInfo (hostInfo h)) = h
-		| otherwise = foldl orchestrate' (removeold h) (map (deloop h) os)
 	os = extractOrchestras hs
-
-	removeold h = foldl removeold' h (oldconductorsof h)
-	removeold' h oldconductor = setContainerProps h $ containerProps h
-		! conductedBy oldconductor
-
-	oldconductors = zip hs (map (fromInfo . hostInfo) hs)
-	oldconductorsof h = flip mapMaybe oldconductors $ 
-		\(oldconductor, NotConductorFor l) ->
-			if any (sameHost h) l
-				then Just oldconductor
-				else Nothing
+	go h
+		| isOrchestrated (getInfo (hostInfo h)) = h
+		| otherwise = foldl orchestrate' h (map (deloop h) os)
 
 orchestrate' :: Host -> Orchestra -> Host
 orchestrate' h (Conducted _) = h
 orchestrate' h (Conductor c l)
 	| sameHost h c = cont $ addConductorPrivData h (concatMap allHosts l)
-	| any (sameHost h) (map topHost l) = cont $
-		setContainerProps h $ containerProps h
-			& conductedBy c
+	| any (sameHost h) (map topHost l) = cont $ h
+		& conductedBy c
 	| otherwise = cont h
   where
 	cont h' = foldl orchestrate' h' l
@@ -245,16 +231,14 @@ orchestrate' h (Conductor c l)
 -- The host this property is added to becomes the conductor for the
 -- specified Host. Note that `orchestrate` must be used for this property
 -- to have any effect.
-conductorFor :: Host -> Property (HasInfo + UnixLike)
-conductorFor h = go
-	`setInfoProperty` (toInfo (ConductorFor [h]))
-	`requires` setupRevertableProperty (conductorKnownHost h)
+conductorFor :: Host -> Property HasInfo
+conductorFor h = infoProperty desc go (addInfo mempty (ConductorFor [h])) []
+	`requires` Ssh.knownHost [h] (hostName h) (User "root")
 	`requires` Ssh.installed
   where
 	desc = cdesc (hostName h)
 
-	go :: Property UnixLike
-	go = property desc $ ifM (isOrchestrated <$> askInfo)
+	go = ifM (isOrchestrated <$> askInfo)
 		( do
 			pm <- liftIO $ filterPrivData h
 				<$> readPrivDataFile privDataLocal
@@ -268,23 +252,6 @@ conductorFor h = go
 			return FailedChange
 		)
 
--- Reverts conductorFor.
-notConductorFor :: Host -> Property (HasInfo + UnixLike)
-notConductorFor h = (doNothing :: Property UnixLike)
-	`setInfoProperty` (toInfo (NotConductorFor [h]))
-	`describe` desc
-	`requires` undoRevertableProperty (conductorKnownHost h)
-  where
-	desc = "not " ++ cdesc (hostName h)
-
-conductorKnownHost :: Host -> RevertableProperty UnixLike UnixLike
-conductorKnownHost h = 
-	mk Ssh.knownHost
-		<!>
-	mk Ssh.unknownHost
-  where
-	mk p = p [h] (hostName h) (User "root")
-
 -- Gives a conductor access to all the PrivData of the specified hosts.
 -- This allows it to send it on the the hosts when conducting it.
 --
@@ -296,16 +263,19 @@ addConductorPrivData h hs = h { hostInfo = hostInfo h <> i }
 	i = mempty 
 		`addInfo` mconcat (map privinfo hs)
 		`addInfo` Orchestrated (Any True)
-	privinfo h' = forceHostContext (hostName h') $ fromInfo (hostInfo h')
+	privinfo h = forceHostContext (hostName h) $ getInfo (hostInfo h)
+
+-- Reverts conductorFor.
+notConductorFor :: Host -> Property HasInfo
+notConductorFor h = pureInfoProperty desc (NotConductorFor [h])
+  where
+	desc = "not " ++ cdesc (hostName h)
 
 -- Use this property to let the specified conductor ssh in and run propellor.
-conductedBy :: Host -> RevertableProperty UnixLike UnixLike
-conductedBy h = (setup <!> teardown)
+conductedBy :: Host -> Property NoInfo
+conductedBy h = User "root" `Ssh.authorizedKeysFrom` (User "root", h)
 	`describe` ("conducted by " ++ hostName h)
-  where
-	setup = User "root" `Ssh.authorizedKeysFrom` (User "root", h)
-		`requires` Ssh.installed
-	teardown = User "root" `Ssh.unauthorizedKeysFrom` (User "root", h)
+	`requires` Ssh.installed
 
 cdesc :: String -> Desc
 cdesc n = "conducting " ++ n
@@ -323,15 +293,15 @@ instance Show NotConductorFor where
 	show (NotConductorFor l) = "NotConductorFor " ++ show (map hostName l)
 
 instance IsInfo ConductorFor where
-	propagateInfo _ = PropagateInfo False
+	propagateInfo _ = False
 instance IsInfo NotConductorFor where
-	propagateInfo _ = PropagateInfo False
+	propagateInfo _ = False
 
 -- Added to Info when a host has been orchestrated.
 newtype Orchestrated = Orchestrated Any
 	deriving (Typeable, Monoid, Show)
 instance IsInfo Orchestrated where
-	propagateInfo _ = PropagateInfo False
+	propagateInfo _ = False
 
 isOrchestrated :: Orchestrated -> Bool
 isOrchestrated (Orchestrated v) = getAny v

@@ -91,7 +91,7 @@ Library
     Propellor.Property.Borg
     Propellor.Property.Ccache
     Propellor.Property.Cmd
-    Propellor.Property.ControlHeir
+    Propellor.Property.Conductor
     Propellor.Property.Hostname
     Propellor.Property.Chroot
     Propellor.Property.ConfFile
