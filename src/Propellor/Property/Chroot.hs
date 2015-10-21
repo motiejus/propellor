@@ -102,6 +102,29 @@ class ChrootBootstrapper b where
 	-- If the operating System is not supported, return Nothing.
 	buildchroot :: b -> System -> FilePath -> Maybe (Property HasInfo)
 
+-- | Use to extract a tarball with a filesystem image.
+--
+-- The filesystem image is expected to be a root directory (no top-level
+-- directory, also known as a "tarbomb"). It may be optionally compressed with
+-- any format `tar` knows how to detect automatically.
+data ChrootTarball = ChrootTarball FilePath
+
+instance ChrootBootstrapper ChrootTarball where
+	buildchroot (ChrootTarball tb) _ loc = Just $ extractTarball loc tb
+
+extractTarball :: FilePath -> FilePath -> Property HasInfo
+extractTarball target src = toProp .
+	check (unpopulated target) $
+		cmdProperty "tar" params
+			`requires` File.dirExists target
+  where
+	params =
+		[ "-C"
+		, target
+		, "-xf"
+		, src
+		]
+
 -- | Use to bootstrap a chroot with debootstrap.
 data Debootstrapped = Debootstrapped Debootstrap.DebootstrapConfig
 
