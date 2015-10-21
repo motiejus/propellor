@@ -111,6 +111,9 @@ f `basedOn` (f', a) = property' desc $ \o -> do
   where
 	desc = f ++ " is based on " ++ f'
 
+lacksLines :: FilePath -> [Line] -> Property NoInfo
+f `lacksLines` ls = fileProperty (f ++ " remove: " ++ show [ls]) (filter (`notElem` ls)) f
+
 -- | Removes a file. Does not remove symlinks or non-plain-files.
 notPresent :: FilePath -> Property UnixLike
 notPresent f = check (doesFileExist f) $ property (f ++ " not present") $ 
