@@ -91,8 +91,7 @@ Library
     Propellor.Property.Borg
     Propellor.Property.Ccache
     Propellor.Property.Cmd
-    Propellor.Property.Concurrent
-    Propellor.Property.Conductor
+    Propellor.Property.ControlHeir
     Propellor.Property.Hostname
     Propellor.Property.Chroot
     Propellor.Property.ConfFile
@@ -136,7 +135,6 @@ Library
     Propellor.Property.Reboot
     Propellor.Property.Restic
     Propellor.Property.Rsync
-    Propellor.Property.Spin
     Propellor.Property.Scheduled
     Propellor.Property.Schroot
     Propellor.Property.Service
