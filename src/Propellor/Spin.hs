@@ -123,9 +123,9 @@ spin' mprivdata relay target hst = do
 		Nothing
 			| relaying -> do
 				let f = privDataRelay hn
-				d <- readFileStrictAnyEncoding f
+				d <- readPrivDataFile f
 				nukeFile f
-				return (readPrivData d)
+				return d
 			| otherwise -> 
 				filterPrivData hst <$> decryptPrivData
 		Just pd -> pure pd
