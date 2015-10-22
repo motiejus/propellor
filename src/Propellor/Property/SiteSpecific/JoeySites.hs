@@ -19,8 +19,6 @@ import qualified Propellor.Property.Obnam as Obnam
 import qualified Propellor.Property.Apache as Apache
 import qualified Propellor.Property.Postfix as Postfix
 import qualified Propellor.Property.Systemd as Systemd
-import qualified Propellor.Property.Fail2Ban as Fail2Ban
-import qualified Propellor.Property.LetsEncrypt as LetsEncrypt
 import Utility.FileMode
 
 import Data.List
