@@ -53,55 +53,27 @@ data LoopDev = LoopDev
 	, wholeDiskLoopDev :: FilePath -- ^ corresponding device for the whole loop disk
 	} deriving (Show)
 
-isLoopDev :: LoopDev -> IO Bool
-isLoopDev l = isLoopDev' (partitionLoopDev l) <&&> isLoopDev' (wholeDiskLoopDev l)
-
-isLoopDev' :: FilePath -> IO Bool
-isLoopDev' f
-	| "loop" `isInfixOf` f = catchBoolIO $
-		isBlockDevice <$> getFileStatus f
-	| otherwise = return False
-
 -- | Uses the kpartx utility to create device maps for partitions contained
 -- within a disk image file. The resulting loop devices are passed to the
 -- property, which can operate on them. Always cleans up after itself,
 -- by removing the device maps after the property is run.
-kpartx :: FilePath -> ([LoopDev] -> Property DebianLike) -> Property DebianLike
+kpartx :: FilePath -> ([LoopDev] -> Property NoInfo) -> Property NoInfo
 kpartx diskimage mkprop = go `requires` Apt.installed ["kpartx"]
   where
 	go :: Property DebianLike
 	go = property' (getDesc (mkprop [])) $ \w -> do
 		cleanup -- idempotency
-		loopdevs <- liftIO $ kpartxParse
-			<$> readProcess "kpartx" ["-avs", diskimage]
-		bad <- liftIO $ filterM (not <$$> isLoopDev) loopdevs
-		unless (null bad) $
-			error $ "kpartx output seems to include non-loop-devices (possible parse failure): " ++ show bad
-		r <- ensureProperty w (mkprop loopdevs)
+		s <- liftIO $ readProcess "kpartx" ["-avs", diskimage]
+		r <- ensureProperty (mkprop (kpartxParse s))
 		cleanup
 		return r
 	cleanup = void $ liftIO $ boolSystem "kpartx" [Param "-d", File diskimage]
 
--- kpartx's output includes the device for the loop partition, and some
--- information about the whole disk loop device. In earlier versions,
--- this was simply the path to the loop device. But, in kpartx 0.6,
--- this changed to the major:minor of the block device. Either is handled
--- by this parser. 
 kpartxParse :: String -> [LoopDev]
 kpartxParse = mapMaybe (finddev . words) . lines
   where
-	finddev ("add":"map":ld:_:_:_:_:s:_) = do
-		wd <- if isAbsolute s
-			then Just s
-			-- A loop partition name loop0pn corresponds to
-			-- /dev/loop0. It would be more robust to check
-			-- that the major:minor matches, but haskell's
-			-- unix library lacks a way to do that.
-			else case takeWhile isDigit (dropWhile (not . isDigit) ld) of
-				[] -> Nothing
-				n -> Just $ "/dev" </> "loop" ++ n
-		Just $ LoopDev
-			{ partitionLoopDev = "/dev/mapper/" ++ ld
-			, wholeDiskLoopDev = wd
-			}
+	finddev ("add":"map":ld:_:_:_:_:wd:_) = Just $ LoopDev 
+		{ partitionLoopDev = "/dev/mapper/" ++ ld
+		, wholeDiskLoopDev = wd
+		}
 	finddev _ = Nothing

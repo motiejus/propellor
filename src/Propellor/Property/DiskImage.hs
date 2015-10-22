@@ -177,15 +177,14 @@ imageBuiltFrom img chrootdir tabletype final partspec = mkimg <!> rmimg
 		imageFinalized final mnts mntopts devs parttable
 	rmimg = File.notPresent img
 
-partitionsPopulated :: FilePath -> [Maybe MountPoint] -> [MountOpts] -> [LoopDev] -> Property DebianLike
-partitionsPopulated chrootdir mnts mntopts devs = property' desc $ \w ->
-	mconcat $ zipWith3 (go w) mnts mntopts devs
+partitionsPopulated :: FilePath -> [MountPoint] -> [LoopDev] -> Property NoInfo
+partitionsPopulated chrootdir mnts devs = property desc $ mconcat $ zipWith go mnts devs
   where
 	desc = "partitions populated from " ++ chrootdir
 
-	go _ Nothing _ _ = noChange
-	go w (Just mnt) mntopt loopdev = withTmpDir "mnt" $ \tmpdir -> bracket
-		(liftIO $ mount "auto" (partitionLoopDev loopdev) tmpdir mntopt)
+	go Nothing _ = noChange
+	go (Just mnt) loopdev = withTmpDir "mnt" $ \tmpdir -> bracket
+		(liftIO $ mount "auto" (partitionLoopDev loopdev) tmpdir)
 		(const $ liftIO $ umountLazy tmpdir)
 		$ \ismounted -> if ismounted
 			then ensureProperty w $

@@ -162,6 +162,7 @@ partitioned eep disk (PartTable tabletype parts) = property' desc $ \w -> do
 		& if isdev
 			then formatl (map (\n -> disk ++ show n) [1 :: Int ..])
 			else Partition.kpartx disk (formatl . map Partition.partitionLoopDev)
+		]
   where
 	desc = disk ++ " partitioned"
 	formatl devs = combineProperties desc (toProps $ map format (zip parts devs))
