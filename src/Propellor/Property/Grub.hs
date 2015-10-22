@@ -19,19 +19,18 @@ data BIOS = PC | EFI64 | EFI32 | Coreboot | Xen
 -- bootloader.
 --
 -- This includes running update-grub.
-installed :: BIOS -> Property DebianLike
-installed bios = installed' bios `onChange` mkConfig
+installed :: BIOS -> Property NoInfo
+installed bios = installed' bios `before` mkConfig
 
 -- Run update-grub, to generate the grub boot menu. It will be
--- automatically updated when kernel packages are installed.
-mkConfig :: Property DebianLike
-mkConfig = tightenTargets $ cmdProperty "update-grub" []
-	`assume` MadeChange
+-- automatically updated when kernel packages are
+--   -- installed.
+mkConfig :: Property NoInfo
+mkConfig = cmdProperty "update-grub" []
 
 -- | Installs grub; does not run update-grub.
-installed' :: BIOS -> Property Linux
-installed' bios = (aptinstall `pickOS` unsupportedOS)
-	`describe` "grub package installed"
+installed' :: BIOS -> Property NoInfo
+installed' bios = Apt.installed [pkg] `describe` "grub package installed"
   where
 	aptinstall :: Property DebianLike
 	aptinstall = Apt.installed [debpkg]

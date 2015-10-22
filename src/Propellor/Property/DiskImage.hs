@@ -371,3 +371,91 @@ toSysDir :: FilePath -> FilePath -> FilePath
 toSysDir chrootdir d = case makeRelative chrootdir d of
 		"." -> "/"
 		sysdir -> "/" ++ sysdir
+
+-- | Where a partition is mounted. Use Nothing for eg, LinuxSwap.
+type MountPoint = Maybe FilePath
+
+defSz :: PartSize
+defSz = MegaBytes 128
+
+-- Add 2% for filesystem overhead. Rationalle for picking 2%:
+-- A filesystem with 1% overhead might just sneak by as acceptable.
+-- Double that just in case. Add an additional 3 mb to deal with
+-- non-scaling overhead, of filesystems (eg, superblocks).
+fudge :: PartSize -> PartSize
+fudge (MegaBytes n) = MegaBytes (n + n `div` 100 * 2 + 3)
+
+-- | Specifies a mount point and a constructor for a Partition.
+-- 
+-- The size that is eventually provided is the amount of space needed to 
+-- hold the files that appear in the directory where the partition is to be
+-- mounted. Plus a fudge factor, since filesystems have some space
+-- overhead.
+--
+-- (Partitions that are not to be mounted (ie, LinuxSwap), or that have
+-- no corresponding directory in the chroot will have 128 MegaBytes
+-- provided as a default size.)
+type PartSpec = (MountPoint, PartSize -> Partition)
+
+-- | Specifies a swap partition of a given size.
+swapPartition :: PartSize -> PartSpec
+swapPartition sz = (Nothing, const (mkPartition LinuxSwap sz))
+
+-- | Specifies a partition with a given filesystem.
+--
+-- The partition is not mounted anywhere by default; use the combinators
+-- below to configure it.
+partition :: Fs -> PartSpec
+partition fs = (Nothing, mkPartition fs)
+
+-- | Specifies where to mount a partition.
+mountedAt :: PartSpec -> FilePath -> PartSpec
+mountedAt (_, p) mp = (Just mp, p)
+
+-- | Adds additional free space to the partition.
+addFreeSpace :: PartSpec -> PartSize -> PartSpec
+addFreeSpace (mp, p) freesz = (mp, \sz -> p (sz <> freesz))
+
+-- | Forced a partition to be a specific size, instead of scaling to the
+-- size needed for the files in the chroot.
+setSize :: PartSpec -> PartSize -> PartSpec
+setSize (mp, p) sz = (mp, const (p sz))
+
+-- | Sets a flag on the partition.
+setFlag :: PartSpec -> PartFlag -> PartSpec
+setFlag s f = adjustp s $ \p -> p { partFlags = (f, True):partFlags p }
+
+-- | Makes a MSDOS partition be Extended, rather than Primary.
+extended :: PartSpec -> PartSpec
+extended s = adjustp s $ \p -> p { partType = Extended }
+
+adjustp :: PartSpec -> (Partition -> Partition) -> PartSpec
+adjustp (mp, p) f = (mp, f . p)
+
+-- | The constructor for each Partition is passed the size of the files
+-- from the chroot that will be put in that partition.
+fitChrootSize :: TableType -> [PartSpec] -> [PartSize] -> ([MountPoint], PartTable)
+fitChrootSize tt l basesizes = (mounts, parttable)
+  where
+	(mounts, sizers) = unzip l
+	parttable = PartTable tt (zipWith id sizers basesizes)
+
+-- | A pair of properties. The first property is satisfied within the
+-- chroot, and is typically used to download the boot loader.
+-- The second property is satisfied chrooted into the resulting
+-- disk image, and will typically take care of installing the boot loader
+-- to the disk image.
+type Finalization = (Property NoInfo, Property NoInfo)
+
+-- | Makes grub be the boot loader of the disk image.
+-- TODO not implemented
+grubBooted :: Grub.BIOS -> Finalization
+grubBooted bios = (inchroot, inimg)
+  where
+	-- Need to set up device.map manually before running update-grub.
+	inchroot = Grub.installed' bios
+
+	inimg = undefined
+
+noFinalization :: Finalization
+noFinalization = (doNothing, doNothing)
