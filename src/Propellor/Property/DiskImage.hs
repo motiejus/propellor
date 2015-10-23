@@ -63,10 +63,11 @@ type DiskImage = FilePath
 -- Example use:
 --
 -- > import Propellor.Property.DiskImage
--- > import Propellor.Property.Chroot
--- > 
--- > foo = host "foo.example.com" $ props
--- > 	& imageBuilt "/srv/diskimages/disk.img" mychroot
+--
+-- > let chroot d = Chroot.debootstrapped (System (Debian Unstable) "amd64") mempty d
+-- > 		& Apt.installed ["linux-image-amd64"]
+-- >		& ...
+-- > in imageBuilt "/srv/images/foo.img" chroot
 -- >		MSDOS (grubBooted PC)
 -- >		[ partition EXT2 `mountedAt` "/boot"
 -- >			`setFlag` BootFlag
@@ -75,48 +76,18 @@ type DiskImage = FilePath
 -- >			`mountOpt` errorReadonly
 -- >		, swapPartition (MegaBytes 256)
 -- >		]
--- >  where
--- >	mychroot d = debootstrapped mempty d $ props
--- >		& osDebian Unstable X86_64
--- >		& Apt.installed ["linux-image-amd64"]
--- >		& User.hasPassword (User "root")
--- >		& User.accountFor (User "demo")
--- > 		& User.hasPassword (User "demo")
--- >		& User.hasDesktopGroups (User "demo")
--- > 		& ...
---
--- This can also be used with `Chroot.hostChroot` to build a disk image
--- that has all the properties of a Host. For example:
---
--- > foo :: Host
--- > foo = host "foo.example.com" $ props
--- >	& imageBuilt "/srv/diskimages/bar-disk.img"
--- >		(hostChroot bar (Debootstrapped mempty))
--- >		MSDOS (grubBooted PC)
--- >		[ partition EXT2 `mountedAt` "/boot"
--- >			`setFlag` BootFlag
--- >		, partition EXT4 `mountedAt` "/"
--- >			`addFreeSpace` MegaBytes 5000
--- >		, swapPartition (MegaBytes 256)
--- >		]
--- >
--- > bar :: Host
--- > bar = host "bar.example.com" $ props
--- >	& osDebian Unstable X86_64
--- >	& Apt.installed ["linux-image-amd64"]
--- >	& hasPassword (User "root")
-imageBuilt :: DiskImage -> (FilePath -> Chroot) -> TableType -> Finalization -> [PartSpec] -> RevertableProperty (HasInfo + DebianLike) Linux
+imageBuilt :: DiskImage -> (FilePath -> Chroot) -> TableType -> Finalization -> [PartSpec] -> RevertableProperty
 imageBuilt = imageBuilt' False
 
 -- | Like 'built', but the chroot is deleted and rebuilt from scratch each
 -- time. This is more expensive, but useful to ensure reproducible results
 -- when the properties of the chroot have been changed.
-imageRebuilt :: DiskImage -> (FilePath -> Chroot) -> TableType -> Finalization -> [PartSpec] -> RevertableProperty (HasInfo + DebianLike) Linux
+imageRebuilt :: DiskImage -> (FilePath -> Chroot) -> TableType -> Finalization -> [PartSpec] -> RevertableProperty
 imageRebuilt = imageBuilt' True
 
-imageBuilt' :: Bool -> DiskImage -> (FilePath -> Chroot) -> TableType -> [PartSpec] -> Finalization -> RevertableProperty
-imageBuilt' rebuild img mkchroot tabletype partspec final = 
-	imageBuiltFrom img chrootdir tabletype partspec final
+imageBuilt' :: Bool -> DiskImage -> (FilePath -> Chroot) -> TableType -> Finalization -> [PartSpec] -> RevertableProperty
+imageBuilt' rebuild img mkchroot tabletype final partspec = 
+	imageBuiltFrom img chrootdir tabletype final partspec
 		`requires` Chroot.provisioned chroot
 		`requires` (cleanrebuild <!> (doNothing :: Property UnixLike))
 		`describe` desc
@@ -151,8 +122,8 @@ cachesCleaned = "cache cleaned" ==> (Apt.cacheCleaned `pickOS` skipit)
 	skipit = doNothing :: Property UnixLike
 
 -- | Builds a disk image from the contents of a chroot.
-imageBuiltFrom :: DiskImage -> FilePath -> TableType -> [PartSpec] -> Finalization -> RevertableProperty
-imageBuiltFrom img chrootdir tabletype partspec final = mkimg <!> rmimg
+imageBuiltFrom :: DiskImage -> FilePath -> TableType -> Finalization -> [PartSpec] -> RevertableProperty
+imageBuiltFrom img chrootdir tabletype final partspec = mkimg <!> rmimg
   where
 	desc = img ++ " built from " ++ chrootdir
 	mkimg = property' desc $ \w -> do
