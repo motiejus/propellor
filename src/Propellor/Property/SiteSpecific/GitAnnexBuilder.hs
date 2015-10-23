@@ -105,13 +105,14 @@ cabalDeps = flagFile go cabalupdated
 			`assume` MadeChange
 		cabalupdated = homedir </> ".cabal" </> "packages" </> "hackage.haskell.org" </> "00-index.cache"
 
-autoBuilderContainer :: (DebianSuite -> Architecture -> Flavor -> Property (HasInfo + Debian)) -> DebianSuite -> Architecture -> Flavor -> Times -> TimeOut -> Systemd.Container
-autoBuilderContainer mkprop suite arch flavor crontime timeout =
-	Systemd.container name $ \d -> Chroot.debootstrapped mempty d $ props
-		& mkprop suite arch flavor
-		& autobuilder (architectureToDebianArchString arch) crontime timeout
+autoBuilderContainer :: (System -> Flavor -> Property HasInfo) -> System -> Flavor -> Times -> TimeOut -> Systemd.Container
+autoBuilderContainer mkprop osver@(System _ arch) flavor crontime timeout =
+	Systemd.container name osver (Chroot.debootstrapped mempty)
+		& mkprop osver flavor
+		& buildDepsApt
+		& autobuilder arch crontime timeout
   where
-	name = architectureToDebianArchString arch ++ fromMaybe "" flavor ++ "-git-annex-builder"
+	name = arch ++ fromMaybe "" flavor ++ "-git-annex-builder"
 
 type Flavor = Maybe String
 
@@ -198,19 +199,14 @@ androidAutoBuilderContainer'
 	-> Times
 	-> TimeOut
 	-> Systemd.Container
-androidAutoBuilderContainer' name setupgitannexdir gitannexdir crontimes timeout =
-	Systemd.container name $ \d -> bootstrap d $ props
-		& osDebian (Stable "jessie") X86_32
-		& Apt.stdSourcesList
-		& User.accountFor (User builduser)
-		& File.dirExists gitbuilderdir
-		& File.ownerGroup homedir (User builduser) (Group builduser)
-		& flagFile chrootsetup ("/chrootsetup")
-			`requires` setupgitannexdir
-		& haskellPkgsInstalled "android"
-		& Apt.unattendedUpgrades
-		& buildDepsNoHaskellLibs
-		& autobuilder "android" crontimes timeout
+androidContainer name setupgitannexdir gitannexdir = Systemd.container name osver bootstrap
+	& Apt.stdSourcesList
+	& User.accountFor (User builduser)
+	& File.dirExists gitbuilderdir
+	& File.ownerGroup homedir (User builduser) (Group builduser)
+	& flagFile chrootsetup ("/chrootsetup")
+		`requires` setupgitannexdir
+	& haskellPkgsInstalled "android"
   where
 	-- Use git-annex's android chroot setup script, which will install
 	-- ghc-android and the NDK, all build deps, etc, in the home
@@ -218,5 +214,5 @@ androidAutoBuilderContainer' name setupgitannexdir gitannexdir crontimes timeout
 	chrootsetup = scriptProperty
 		[ "cd " ++ gitannexdir ++ " && ./standalone/android/buildchroot-inchroot"
 		]
-		`assume` MadeChange
+	osver = System (Debian (Stable "jessie")) "i386"
 	bootstrap = Chroot.debootstrapped mempty

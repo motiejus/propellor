@@ -197,38 +197,32 @@ logindConfigured option value =
 killUserProcesses :: RevertableProperty Linux Linux
 killUserProcesses = set "yes" <!> set "no"
   where
-	set = logindConfigured "KillUserProcesses"
+	go = withOS ("standard sources.list") $ \o ->
+		case o of
+			-- Split into separate debian package since systemd 225.
+			(Just (System (Debian suite) _))
+				| not (isStable suite) -> ensureProperty $
+					Apt.installed ["systemd-container"]
+			_ -> noChange
 
--- | Ensures machined and machinectl are installed
-machined :: Property Linux
-machined = withOS "machined installed" $ \w o ->
-	case o of
-		-- Split into separate debian package since systemd 225.
-		(Just (System (Debian _ suite) _))
-			| not (isStable suite) -> ensureProperty w $
-				Apt.installed ["systemd-container"]
-		_ -> noChange
-
--- | Defines a container with a given machine name,
+-- | Defines a container with a given machine name, and operating system,
 -- and how to create its chroot if not already present.
 --
 -- Properties can be added to configure the Container. At a minimum,
 -- add a property such as `osDebian` to specify the operating system
 -- to bootstrap.
 --
--- > container "webserver" $ \d -> Chroot.debootstrapped mempty d $ props
--- >	& osDebian Unstable X86_64
+-- > container "webserver" (System (Debian Unstable) "amd64") (Chroot.debootstrapped mempty)
 -- >    & Apt.installedRunning "apache2"
 -- >    & ...
-container :: MachineName -> (FilePath -> Chroot.Chroot) -> Container
-container name mkchroot =
-	let c = Container name chroot h
-	in setContainerProps c $ containerProps c
-		&^ resolvConfed
-		&^ linkJournal
+container :: MachineName -> System -> (FilePath -> Chroot.Chroot) -> Container
+container name system mkchroot = Container name c h
+	& os system
+	& resolvConfed
+	& linkJournal
   where
 	c = mkchroot (containerDir name)
-	system = Chroot.chrootSystem c
+		& os system
 	h = Host name [] mempty
 
 -- | Runs a container using systemd-nspawn.
@@ -246,7 +240,7 @@ container name mkchroot =
 -- Reverting this property stops the container, removes the systemd unit,
 -- and deletes the chroot and all its contents.
 nspawned :: Container -> RevertableProperty
-nspawned c@(Container name (Chroot.Chroot loc system builder _) h) =
+nspawned c@(Container name (Chroot.Chroot loc builder _) h) =
 	p `describe` ("nspawned " ++ name)
   where
 	p :: RevertableProperty (HasInfo + Linux) Linux
@@ -268,7 +262,7 @@ nspawned c@(Container name (Chroot.Chroot loc system builder _) h) =
 			<!>
 		doNothing
 
-	chroot = Chroot.Chroot loc system builder h
+	chroot = Chroot.Chroot loc builder h
 
 -- | Sets up the service file for the container, and then starts
 -- it running.
@@ -434,7 +428,7 @@ instance Publishable (Proto, Bound Port) where
 -- >
 -- > webserver :: Systemd.container
 -- > webserver = Systemd.container "webserver" (Chroot.debootstrapped mempty)
--- >	& os (System (Debian Testing) X86_64)
+-- >	& os (System (Debian Testing) "amd64")
 -- >	& Systemd.privateNetwork
 -- >	& Systemd.running Systemd.networkd
 -- >	& Systemd.publish (Port 80 ->- Port 8080)

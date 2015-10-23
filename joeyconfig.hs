@@ -102,9 +102,8 @@ darkstar = host "darkstar.kitenet.net" $ props
 		, swapPartition (MegaBytes 256)
 		]
   where
-	c d = Chroot.debootstrapped mempty d $ props
-		& osDebian Unstable X86_64
-		& Hostname.setTo "demo"
+	c d = Chroot.debootstrapped mempty d
+		& os (System (Debian Unstable) "amd64")
 		& Apt.installed ["linux-image-amd64"]
 		& User "root" `User.hasInsecurePassword` "root"
 
@@ -602,12 +601,14 @@ standardSystemUnhardened suite arch motd = propertyList "standard system" $ prop
 	! Systemd.killUserProcesses
 
 -- This is my standard container setup, Featuring automatic upgrades.
-standardContainer :: DebianSuite -> Property (HasInfo + Debian)
-standardContainer suite = propertyList "standard container" $ props
-	& osDebian suite X86_64
-	& Apt.stdSourcesList `onChange` Apt.upgrade
-	& Apt.unattendedUpgrades
-	& Apt.cacheCleaned
+standardContainer :: Systemd.MachineName -> DebianSuite -> Architecture -> Systemd.Container
+standardContainer name suite arch =
+	Systemd.container name system (Chroot.debootstrapped mempty)
+		& Apt.stdSourcesList `onChange` Apt.upgrade
+		& Apt.unattendedUpgrades
+		& Apt.cacheCleaned
+  where
+	system = System (Debian suite) arch
 
 myDnsSecondary :: Property (HasInfo + DebianLike)
 myDnsSecondary = propertyList "dns secondary for all my domains" $ props
