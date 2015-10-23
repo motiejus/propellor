@@ -4,6 +4,7 @@ module Propellor.Property.Chroot (
 	Chroot(..),
 	ChrootBootstrapper(..),
 	Debootstrapped(..),
+	ChrootTarball(..),
 	debootstrapped,
 	bootstrapped,
 	provisioned,
@@ -102,11 +103,12 @@ class ChrootBootstrapper b where
 	-- If the operating System is not supported, return Nothing.
 	buildchroot :: b -> System -> FilePath -> Maybe (Property HasInfo)
 
--- | Use to extract a tarball with a filesystem image.
+-- | Use this to bootstrap a chroot by extracting a tarball.
 --
--- The filesystem image is expected to be a root directory (no top-level
--- directory, also known as a "tarbomb"). It may be optionally compressed with
--- any format `tar` knows how to detect automatically.
+-- The tarball is expected to contain a root directory (no top-level
+-- directory, also known as a "tarbomb").
+-- It may be optionally compressed with any format `tar` knows how to
+-- detect automatically.
 data ChrootTarball = ChrootTarball FilePath
 
 instance ChrootBootstrapper ChrootTarball where
@@ -125,7 +127,7 @@ extractTarball target src = toProp .
 		, src
 		]
 
--- | Use to bootstrap a chroot with debootstrap.
+-- | Use this to bootstrap a chroot with debootstrap.
 data Debootstrapped = Debootstrapped Debootstrap.DebootstrapConfig
 
 instance ChrootBootstrapper Debootstrapped where
