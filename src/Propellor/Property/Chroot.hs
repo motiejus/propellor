@@ -240,7 +240,7 @@ inChrootProcess keepprocmounted (Chroot loc _ _) cmd = do
 	-- /proc/self/exe which is necessary for some commands to work
 	mountproc = unlessM (elem procloc <$> mountPointsBelow loc) $
 		void $ mount "proc" "proc" procloc mempty
-
+	
 	procloc = loc </> "proc"
 
 	cleanup
