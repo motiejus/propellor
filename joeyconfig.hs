@@ -108,7 +108,6 @@ darkstar = host "darkstar.kitenet.net" $ props
 		& Hostname.setTo "demo"
 		& Apt.installed ["linux-image-amd64"]
 		& User "root" `User.hasInsecurePassword` "root"
-		& bootstrappedFrom GitRepoOutsideChroot
 
 gnu :: Host
 gnu = host "gnu.kitenet.net" $ props
