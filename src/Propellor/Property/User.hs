@@ -96,7 +96,7 @@ setPassword getpassword = getpassword $ go
 
 -- | Makes a user's password be the passed String. Highly insecure:
 -- The password is right there in your config file for anyone to see!
-hasInsecurePassword :: User -> String -> Property DebianLike
+hasInsecurePassword :: User -> String -> Property NoInfo
 hasInsecurePassword u@(User n) p = property (n ++ " has insecure password") $
 	chpasswd u p []
 
@@ -106,15 +106,12 @@ chpasswd (User user) v ps = makeChange $ withHandle StdinHandle createProcessSuc
 		hPutStrLn h $ user ++ ":" ++ v
 		hClose h
 
-lockedPassword :: User -> Property DebianLike
-lockedPassword user@(User u) = tightenTargets $ 
-	check (not <$> isLockedPassword user) go
-		`describe` ("locked " ++ u ++ " password")
-  where
-	go = cmdProperty "passwd"
-		[ "--lock"
-		, u
-		]
+lockedPassword :: User -> Property NoInfo
+lockedPassword user@(User u) = check (not <$> isLockedPassword user) $ cmdProperty "passwd"
+	[ "--lock"
+	, u
+	]
+	`describe` ("locked " ++ u ++ " password")
 
 data PasswordStatus = NoPassword | LockedPassword | HasPassword
 	deriving (Eq)
