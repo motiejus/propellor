@@ -99,6 +99,7 @@ darkstar = host "darkstar.kitenet.net" $ props
 		[ partition EXT2 `mountedAt` "/boot"
 			`setFlag` BootFlag
 		, partition EXT4 `mountedAt` "/"
+			`mountOpt` errorReadonly
 		, swapPartition (MegaBytes 256)
 		]
   where
