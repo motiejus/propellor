@@ -335,9 +335,13 @@ withOS desc a = property desc $ a dummyoutermetatypes =<< getOS
 	dummyoutermetatypes :: OuterMetaTypesWitness ('[])
 	dummyoutermetatypes = OuterMetaTypesWitness sing
 
--- | A property that always fails with an unsupported OS error.
-unsupportedOS :: Property UnixLike
-unsupportedOS = property "unsupportedOS" unsupportedOS'
+-- | Makes a Property only need to do anything when a test succeeds.
+check :: (LiftPropellor m) => m Bool -> Property i -> Property i
+check c p = adjustPropertySatisfy p $ \satisfy -> 
+	ifM (liftPropellor c)
+		( satisfy
+		, return NoChange
+		)
 
 -- | Throws an error, for use in `withOS` when a property is lacking
 -- support for an OS.

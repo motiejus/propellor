@@ -33,9 +33,10 @@ module Propellor.Types (
 	-- * Combining and modifying properties
 	, Combines(..)
 	, CombinedType
-	, ResultCombiner
-	, adjustPropertySatisfy
-	-- * Other included types
+	, combineWith
+	, Propellor(..)
+	, LiftPropellor(..)
+	, EndAction(..)
 	, module Propellor.Types.OS
 	, module Propellor.Types.ConfigurableValue
 	, module Propellor.Types.Dns
@@ -53,8 +54,56 @@ import Propellor.Types.OS
 import Propellor.Types.ConfigurableValue
 import Propellor.Types.Dns
 import Propellor.Types.Result
-import Propellor.Types.MetaTypes
-import Propellor.Types.ZFS
+
+-- | Everything Propellor knows about a system: Its hostname,
+-- properties and their collected info.
+data Host = Host
+	{ hostName :: HostName
+	, hostProperties :: [Property HasInfo]
+	, hostInfo :: Info
+	}
+	deriving (Show, Typeable)
+
+-- | Propellor's monad provides read-only access to info about the host
+-- it's running on, and a writer to accumulate EndActions.
+newtype Propellor p = Propellor { runWithHost :: RWST Host [EndAction] () IO p }
+	deriving
+		( Monad
+		, Functor
+		, Applicative
+		, MonadReader Host
+		, MonadWriter [EndAction]
+		, MonadIO
+		, MonadCatch
+		, MonadThrow
+		, MonadMask
+		)
+
+class LiftPropellor m where
+	liftPropellor :: m a -> Propellor a
+
+instance LiftPropellor Propellor where
+	liftPropellor = id
+
+instance LiftPropellor IO where
+	liftPropellor = liftIO
+
+instance Monoid (Propellor Result) where
+	mempty = return NoChange
+	-- | The second action is only run if the first action does not fail.
+	mappend x y = do
+		rx <- x
+		case rx of
+			FailedChange -> return FailedChange
+			_ -> do
+				ry <- y
+				return (rx <> ry)
+
+-- | An action that Propellor runs at the end, after trying to satisfy all
+-- properties. It's passed the combined Result of the entire Propellor run.
+data EndAction = EndAction Desc (Result -> Propellor Result)
+
+type Desc = String
 
 -- | The core data type of Propellor, this represents a property
 -- that the system should have, with a descrition, and an action to ensure
