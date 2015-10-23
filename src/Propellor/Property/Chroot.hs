@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, GADTs #-}
+{-# LANGUAGE FlexibleContexts, GADTs, DeriveDataTypeable #-}
 
 module Propellor.Property.Chroot (
 	debootstrapped,
@@ -8,6 +8,7 @@ module Propellor.Property.Chroot (
 	ChrootBootstrapper(..),
 	Debootstrapped(..),
 	ChrootTarball(..),
+	inChroot,
 	-- * Internal use
 	provisioned',
 	propagateChrootInfo,
@@ -223,7 +224,7 @@ chain hostlist (ChrootChain hn loc systemdonly onconsole) =
 		changeWorkingDirectory localdir
 		when onconsole forceConsole
 		onlyProcess (provisioningLock loc) $ do
-			r <- runPropellor (setInChroot h) $ ensureChildProperties $
+			r <- runPropellor (setInChroot h) $ ensureProperties $
 				if systemdonly
 					then [toChildProperty Systemd.installed]
 					else hostProperties h
@@ -240,7 +241,7 @@ inChrootProcess keepprocmounted (Chroot loc _ _) cmd = do
 	-- /proc/self/exe which is necessary for some commands to work
 	mountproc = unlessM (elem procloc <$> mountPointsBelow loc) $
 		void $ mount "proc" "proc" procloc mempty
-	
+
 	procloc = loc </> "proc"
 
 	cleanup
@@ -258,28 +259,7 @@ mungeloc :: FilePath -> String
 mungeloc = replace "/" "_"
 
 chrootDesc :: Chroot -> String -> String
-<<<<<<< HEAD
-chrootDesc (Chroot loc _ _ _) desc = "chroot " ++ loc ++ " " ++ desc
-
--- | Adding this property to a chroot prevents daemons and other services
--- from being started, which is often something you want to prevent when
--- building a chroot.
---
--- On Debian, this is accomplished by installing a </usr/sbin/policy-rc.d>
--- script that does not let any daemons be started by packages that use
--- invoke-rc.d. Reverting the property removes the script.
---
--- This property has no effect on non-Debian systems.
-noServices :: RevertableProperty UnixLike UnixLike
-noServices = setup <!> teardown
-  where
-	f = "/usr/sbin/policy-rc.d"
-	script = [ "#!/bin/sh", "exit 101" ]
-	setup = combineProperties "no services started" $ toProps
-		[ File.hasContent f script
-		, File.mode f (combineModes (readModes ++ executeModes))
-		]
-	teardown = File.notPresent f
+chrootDesc (Chroot loc _ _) desc = "chroot " ++ loc ++ " " ++ desc
 
 -- | Check if propellor is currently running within a chroot.
 --
@@ -295,57 +275,3 @@ setInChroot h = h { hostInfo = hostInfo h `addInfo` InfoVal (InChroot True) }
 
 newtype InChroot = InChroot Bool
 	deriving (Typeable, Show)
-
--- | Runs an action with the true localdir exposed,
--- not the one bind-mounted into a chroot. The action is passed the
--- path containing the contents of the localdir outside the chroot.
---
--- In a chroot, this is accomplished by temporily bind mounting the localdir
--- to a temp directory, to preserve access to the original bind mount. Then
--- we unmount the localdir to expose the true localdir. Finally, to cleanup,
--- the temp directory is bind mounted back to the localdir.
-exposeTrueLocaldir :: (FilePath -> Propellor a) -> Propellor a
-exposeTrueLocaldir a = ifM inChroot
-	( withTmpDirIn (takeDirectory localdir) "propellor.tmp" $ \tmpdir ->
-		bracket_
-			(movebindmount localdir tmpdir)
-			(movebindmount tmpdir localdir)
-			(a tmpdir)
-	, a localdir
-	)
-  where
-	movebindmount from to = liftIO $ do
-		run "mount" [Param "--bind", File from, File to]
-		-- Have to lazy unmount, because the propellor process
-		-- is running in the localdir that it's unmounting..
-		run "umount" [Param "-l", File from]
-		-- We were in the old localdir; move to the new one after
-		-- flipping the bind mounts. Otherwise, commands that try
-		-- to access the cwd will fail because it got umounted out
-		-- from under.
-		changeWorkingDirectory "/"
-		changeWorkingDirectory localdir
-	run cmd ps = unlessM (boolSystem cmd ps) $
-		error $ "exposeTrueLocaldir failed to run " ++ show (cmd, ps)
-
--- | Generates a Chroot that has all the properties of a Host.
---
--- Note that it's possible to create loops using this, where a host
--- contains a Chroot containing itself etc. Such loops will be detected at
--- runtime.
-hostChroot :: ChrootBootstrapper bootstrapper => Host -> bootstrapper -> FilePath -> Chroot
-hostChroot h bootstrapper d = chroot
-  where
-	chroot = Chroot d bootstrapper pinfo h
-	pinfo = propagateHostChrootInfo h
-
--- This is different than propagateChrootInfo in that Info using
--- HostContext is not made to use the name of the chroot as its context,
--- but instead uses the hostname of the Host.
-propagateHostChrootInfo :: Host -> InfoPropagator
-propagateHostChrootInfo h c pinfo p =
-	propagateContainer (hostName h) c pinfo $
-		p `setInfoProperty` chrootInfo c
-=======
-chrootDesc (Chroot loc _ _) desc = "chroot " ++ loc ++ " " ++ desc
->>>>>>> Changed how the operating system is provided to Chroot (API change).

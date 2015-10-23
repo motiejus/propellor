@@ -105,6 +105,7 @@ darkstar = host "darkstar.kitenet.net" $ props
   where
 	c d = Chroot.debootstrapped mempty d
 		& os (System (Debian Unstable) "amd64")
+		& Hostname.setTo "demo"
 		& Apt.installed ["linux-image-amd64"]
 		& User "root" `User.hasInsecurePassword` "root"
 

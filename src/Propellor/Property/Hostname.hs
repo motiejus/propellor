@@ -11,7 +11,7 @@ import Data.List.Utils
 -- name the `Host` has.
 --
 -- Configures both </etc/hostname> and the current hostname.
--- (However, when used inside a chroot, avoids setting the current hostname
+-- (However, if used inside a chroot, avoids setting the current hostname
 -- as that would impact the system outside the chroot.)
 --
 -- Configures </etc/mailname> with the domain part of the hostname.
@@ -29,6 +29,8 @@ sane' :: ExtractDomain -> Property NoInfo
 sane' extractdomain = property ("sane hostname") $
 	ensureProperty . setTo' extractdomain =<< asks hostName
 
+-- Like `sane`, but you can specify the hostname to use, instead
+-- of the default hostname of the `Host`.
 setTo :: HostName -> Property NoInfo
 setTo = setTo' extractDomain
 
@@ -45,8 +47,12 @@ setTo' extractdomain hn = combineProperties desc $ toProps
 	, hostslines $ catMaybes
 		[ if null domain
 			then Nothing 
-			else Just ("127.0.1.1", [hn, basehost])
-		, Just ("127.0.0.1", ["localhost"])
+			else Just $ trivial $ hostsline "127.0.1.1" [hn, basehost]
+		, Just $ trivial $ hostsline "127.0.0.1" ["localhost"]
+		, Just $ trivial $ check (not <$> inChroot) $
+			cmdProperty "hostname" [basehost]
+		, Just $ "/etc/mailname" `File.hasContent`
+			[if null domain then hn else domain]
 		]
 	, check (not <$> inChroot) $
 		cmdProperty "hostname" [basehost]
