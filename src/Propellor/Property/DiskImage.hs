@@ -175,7 +175,7 @@ partitionsPopulated chrootdir mnts devs = property desc $ mconcat $ zipWith go m
 			[ Include (Pattern m)
 			, Exclude (filesUnder m)
 			-- Preserve any lost+found directory that mkfs made
-			, Protect (Pattern "lost+found")
+			, Exclude (Pattern "lost+found")
 			]) childmnts
 
 -- The constructor for each Partition is passed the size of the files
