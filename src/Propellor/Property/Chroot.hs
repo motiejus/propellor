@@ -1,21 +1,13 @@
 {-# LANGUAGE FlexibleContexts, GADTs #-}
 
 module Propellor.Property.Chroot (
-	Chroot(..),
-	ChrootBootstrapper(..),
-	Debootstrapped(..),
-	ChrootTarball(..),
 	debootstrapped,
 	bootstrapped,
 	provisioned,
-	hostChroot,
 	Chroot(..),
 	ChrootBootstrapper(..),
 	Debootstrapped(..),
 	ChrootTarball(..),
-	noServices,
-	inChroot,
-	exposeTrueLocaldir,
 	-- * Internal use
 	provisioned',
 	propagateChrootInfo,
@@ -175,7 +167,7 @@ provisioned' propigator c@(Chroot loc system bootstrapper _) systemdonly =
   where
 	setup = propellChroot c (inChrootProcess (not systemdonly) c) systemdonly
 		`requires` toProp built
-	
+
 	built = case buildchroot bootstrapper system loc of
 		Just p -> p
 		Nothing -> cantbuild
@@ -361,7 +353,7 @@ exposeTrueLocaldir a = ifM inChroot
 		error $ "exposeTrueLocaldir failed to run " ++ show (cmd, ps)
 
 -- | Generates a Chroot that has all the properties of a Host.
--- 
+--
 -- Note that it's possible to create loops using this, where a host
 -- contains a Chroot containing itself etc. Such loops will be detected at
 -- runtime.
