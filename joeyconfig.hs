@@ -96,7 +96,7 @@ darkstar = host "darkstar.kitenet.net" $ props
 		]
 
 	& imageBuilt "/tmp/img" c MSDOS (grubBooted PC)
-		[ partition EXT4 `mountedAt` "/boot"
+		[ partition EXT2 `mountedAt` "/boot"
 			`addFreeSpace` MegaBytes 100
 			`setFlag` BootFlag
 		, partition EXT4 `mountedAt` "/"
