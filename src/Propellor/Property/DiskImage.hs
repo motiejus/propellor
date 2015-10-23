@@ -148,7 +148,7 @@ imageBuiltFrom img chrootdir tabletype final partspec = mkimg <!> rmimg
 		imageFinalized final mnts devs
 	rmimg = File.notPresent img
 
-partitionsPopulated :: FilePath -> [MountPoint] -> [LoopDev] -> Property NoInfo
+partitionsPopulated :: FilePath -> [Maybe MountPoint] -> [LoopDev] -> Property NoInfo
 partitionsPopulated chrootdir mnts devs = property desc $ mconcat $ zipWith go mnts devs
   where
 	desc = "partitions populated from " ++ chrootdir
@@ -211,124 +211,6 @@ getMountSz szm l (Just mntpt) =
   where
 	childsz = mconcat $ mapMaybe (getMountSz szm l) (filter (isChild mntpt) l)
 
--- | Ensures that a disk image file of the specified size exists.
---
--- If the file doesn't exist, or is too small, creates a new one, full of 0's.
---
--- If the file is too large, truncates it down to the specified size.
-imageExists :: FilePath -> ByteSize -> Property Linux
-imageExists img sz = property ("disk image exists" ++ img) $ liftIO $ do
-	ms <- catchMaybeIO $ getFileStatus img
-	case ms of
-		Just s
-			| toInteger (fileSize s) == toInteger sz -> return NoChange
-			| toInteger (fileSize s) > toInteger sz -> do
-				setFileSize img (fromInteger sz)
-				return MadeChange
-		_ -> do
-			L.writeFile img (L.replicate (fromIntegral sz) 0)
-			return MadeChange
-
--- | A pair of properties. The first property is satisfied within the
--- chroot, and is typically used to download the boot loader.
---
--- The second property is run after the disk image is created,
--- with its populated partition tree mounted in the provided
--- location from the provided loop devices. This will typically
--- take care of installing the boot loader to the image.
---
--- It's ok if the second property leaves additional things mounted
--- in the partition tree.
-type Finalization = (Property Linux, (FilePath -> [LoopDev] -> Property Linux))
-
-imageFinalized :: Finalization -> [Maybe MountPoint] -> [MountOpts] -> [LoopDev] -> PartTable -> Property Linux
-imageFinalized (_, final) mnts mntopts devs (PartTable _ parts) =
-	property' "disk image finalized" $ \w ->
-		withTmpDir "mnt" $ \top ->
-			go w top `finally` liftIO (unmountall top)
-  where
-	go w top = do
-		liftIO $ mountall top
-		liftIO $ writefstab top
-		liftIO $ allowservices top
-		ensureProperty w $ final top devs
-
-	-- Ordered lexographically by mount point, so / comes before /usr
-	-- comes before /usr/local
-	orderedmntsdevs :: [(Maybe MountPoint, (MountOpts, LoopDev))]
-	orderedmntsdevs = sortBy (compare `on` fst) $ zip mnts (zip mntopts devs)
-
-	swaps = map (SwapPartition . partitionLoopDev . snd) $
-		filter ((== LinuxSwap) . partFs . fst) $
-			zip parts devs
-
-	mountall top = forM_ orderedmntsdevs $ \(mp, (mopts, loopdev)) -> case mp of
-		Nothing -> noop
-		Just p -> do
-			let mnt = top ++ p
-			createDirectoryIfMissing True mnt
-			unlessM (mount "auto" (partitionLoopDev loopdev) mnt mopts) $
-				error $ "failed mounting " ++ mnt
-
-	unmountall top = do
-		unmountBelow top
-		umountLazy top
-
-	writefstab top = do
-		let fstab = top ++ "/etc/fstab"
-		old <- catchDefaultIO [] $ filter (not . unconfigured) . lines
-			<$> readFileStrict fstab
-		new <- genFstab (map (top ++) (catMaybes mnts))
-			swaps (toSysDir top)
-		writeFile fstab $ unlines $ new ++ old
-	-- Eg "UNCONFIGURED FSTAB FOR BASE SYSTEM"
-	unconfigured s = "UNCONFIGURED" `isInfixOf` s
-
-	allowservices top = nukeFile (top ++ "/usr/sbin/policy-rc.d")
-
-noFinalization :: Finalization
-noFinalization = (doNothing, \_ _ -> doNothing)
-
--- | Makes grub be the boot loader of the disk image.
-grubBooted :: Grub.BIOS -> Finalization
-grubBooted bios = (Grub.installed' bios, boots)
-  where
-	boots mnt loopdevs = combineProperties "disk image boots using grub" $ props
-		-- bind mount host /dev so grub can access the loop devices
-		& bindMount "/dev" (inmnt "/dev")
-		& mounted "proc" "proc" (inmnt "/proc") mempty
-		& mounted "sysfs" "sys" (inmnt "/sys") mempty
-		-- update the initramfs so it gets the uuid of the root partition
-		& inchroot "update-initramfs" ["-u"]
-			`assume` MadeChange
-		-- work around for http://bugs.debian.org/802717
-		& check haveosprober (inchroot "chmod" ["-x", osprober])
-		& inchroot "update-grub" []
-			`assume` MadeChange
-		& check haveosprober (inchroot "chmod" ["+x", osprober])
-		& inchroot "grub-install" [wholediskloopdev]
-			`assume` MadeChange
-		-- sync all buffered changes out to the disk image
-		-- may not be necessary, but seemed needed sometimes
-		-- when using the disk image right away.
-		& cmdProperty "sync" []
-			`assume` NoChange
-	  where
-	  	-- cannot use </> since the filepath is absolute
-		inmnt f = mnt ++ f
-
-		inchroot cmd ps = cmdProperty "chroot" ([mnt, cmd] ++ ps)
-
-		haveosprober = doesFileExist (inmnt osprober)
-		osprober = "/etc/grub.d/30_os-prober"
-
-		-- It doesn't matter which loopdev we use; all
-		-- come from the same disk image, and it's the loop dev
-		-- for the whole disk image we seek.
-		wholediskloopdev = case loopdevs of
-			(l:_) -> wholeDiskLoopDev l
-			[] -> error "No loop devs provided!"
-
 isChild :: FilePath -> Maybe MountPoint -> Bool
 isChild mntpt (Just d)
 	| d `equalFilePath` mntpt = False
@@ -341,9 +223,6 @@ toSysDir :: FilePath -> FilePath -> FilePath
 toSysDir chrootdir d = case makeRelative chrootdir d of
 		"." -> "/"
 		sysdir -> "/" ++ sysdir
-
--- | Where a partition is mounted. Use Nothing for eg, LinuxSwap.
-type MountPoint = Maybe FilePath
 
 defSz :: PartSize
 defSz = MegaBytes 128
@@ -365,7 +244,7 @@ fudge (MegaBytes n) = MegaBytes (n + n `div` 100 * 2 + 3)
 -- (Partitions that are not to be mounted (ie, LinuxSwap), or that have
 -- no corresponding directory in the chroot will have 128 MegaBytes
 -- provided as a default size.)
-type PartSpec = (MountPoint, PartSize -> Partition)
+type PartSpec = (Maybe MountPoint, PartSize -> Partition)
 
 -- | Specifies a swap partition of a given size.
 swapPartition :: PartSize -> PartSpec
@@ -404,7 +283,7 @@ adjustp (mp, p) f = (mp, f . p)
 
 -- | The constructor for each Partition is passed the size of the files
 -- from the chroot that will be put in that partition.
-fitChrootSize :: TableType -> [PartSpec] -> [PartSize] -> ([MountPoint], PartTable)
+fitChrootSize :: TableType -> [PartSpec] -> [PartSize] -> ([Maybe MountPoint], PartTable)
 fitChrootSize tt l basesizes = (mounts, parttable)
   where
 	(mounts, sizers) = unzip l
@@ -422,7 +301,7 @@ fitChrootSize tt l basesizes = (mounts, parttable)
 -- in the partition tree.
 type Finalization = (Property NoInfo, (FilePath -> [LoopDev] -> Property NoInfo))
 
-imageFinalized :: Finalization -> [MountPoint] -> [LoopDev] -> Property NoInfo
+imageFinalized :: Finalization -> [Maybe MountPoint] -> [LoopDev] -> Property NoInfo
 imageFinalized (_, final) mnts devs = property "disk image finalized" $ 
 	withTmpDir "mnt" $ \top -> 
 		go top `finally` liftIO (unmountall top)
@@ -433,7 +312,7 @@ imageFinalized (_, final) mnts devs = property "disk image finalized" $
 	
 	-- Ordered lexographically by mount point, so / comes before /usr
 	-- comes before /usr/local
-	orderedmntsdevs :: [(MountPoint, LoopDev)]
+	orderedmntsdevs :: [(Maybe MountPoint, LoopDev)]
 	orderedmntsdevs = sortBy (compare `on` fst) $ zip mnts devs
 
 	mountall top = forM_ orderedmntsdevs $ \(mp, loopdev) -> case mp of
