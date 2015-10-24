@@ -33,7 +33,6 @@ module Propellor.Types (
 	-- * Combining and modifying properties
 	, Combines(..)
 	, CombinedType
-	, combineWith
 	, Propellor(..)
 	, LiftPropellor(..)
 	, EndAction(..)
@@ -118,7 +117,65 @@ type Desc = String
 --
 -- There are many associated type families, which are mostly used
 -- internally, so you needn't worry about them.
-data Property metatypes = Property metatypes Desc (Maybe (Propellor Result)) Info [ChildProperty]
+data Property i where
+	IProperty :: Desc -> Propellor Result -> Info -> [Property HasInfo] -> Property HasInfo
+	SProperty :: Desc -> Propellor Result -> [Property NoInfo] -> Property NoInfo
+
+-- | Indicates that a Property has associated Info.
+data HasInfo
+-- | Indicates that a Property does not have Info.
+data NoInfo
+
+-- | Type level calculation of the combination of HasInfo and/or NoInfo
+type family CInfo x y
+type instance CInfo HasInfo HasInfo = HasInfo
+type instance CInfo HasInfo NoInfo = HasInfo
+type instance CInfo NoInfo HasInfo = HasInfo
+type instance CInfo NoInfo NoInfo = NoInfo
+
+-- | Constructs a Property with associated Info.
+infoProperty 
+	:: Desc -- ^ description of the property
+	-> Propellor Result -- ^ action to run to satisfy the property (must be idempotent; may run repeatedly)
+	-> Info -- ^ info associated with the property
+	-> [Property i] -- ^ child properties
+	-> Property HasInfo
+infoProperty d a i cs = IProperty d a i (map toIProperty cs)
+
+-- | Constructs a Property with no Info.
+simpleProperty :: Desc -> Propellor Result -> [Property NoInfo] -> Property NoInfo
+simpleProperty = SProperty
+
+toIProperty :: Property i -> Property HasInfo
+toIProperty p@(IProperty {}) = p
+toIProperty (SProperty d s cs) = IProperty d s mempty (map toIProperty cs)
+
+toSProperty :: Property i -> Property NoInfo
+toSProperty (IProperty d s _ cs) = SProperty d s (map toSProperty cs)
+toSProperty p@(SProperty {}) = p
+
+-- | Makes a version of a Proprty without its Info.
+-- Use with caution!
+ignoreInfo :: Property i -> Property NoInfo
+ignoreInfo = toSProperty
+
+-- | Gets the action that can be run to satisfy a Property.
+-- You should never run this action directly. Use
+-- 'Propellor.Engine.ensureProperty` instead.
+propertySatisfy :: Property i -> Propellor Result
+propertySatisfy (IProperty _ a _ _) = a
+propertySatisfy (SProperty _ a _) = a
+
+instance Show (Property i) where
+        show p = "property " ++ show (propertyDesc p)
+
+instance Show RevertableProperty where
+        show (RevertableProperty p _) = "property " ++ show (propertyDesc p)
+
+-- | Changes the action that is performed to satisfy a property. 
+adjustPropertySatisfy :: Property i -> (Propellor Result -> Propellor Result) -> Property i
+adjustPropertySatisfy (IProperty d s i cs) f = IProperty d (f s) i cs
+adjustPropertySatisfy (SProperty d s cs) f = SProperty d (f s) cs
 
 instance Show (Property metatypes) where
 	show p = "property " ++ show (getDesc p)
@@ -199,92 +256,59 @@ instance IsProp (RevertableProperty setupmetatypes undometatypes) where
 -- | Type level calculation of the type that results from combining two
 -- types of properties.
 type family CombinedType x y
-type instance CombinedType (Property (MetaTypes x)) (Property (MetaTypes y)) = Property (MetaTypes (Combine x y))
-type instance CombinedType (RevertableProperty (MetaTypes x) (MetaTypes x')) (RevertableProperty (MetaTypes y) (MetaTypes y')) = RevertableProperty (MetaTypes (Combine x y)) (MetaTypes (Combine x' y'))
+type instance CombinedType (Property x) (Property y) = Property (CInfo x y)
+type instance CombinedType RevertableProperty RevertableProperty = RevertableProperty
 -- When only one of the properties is revertable, the combined property is
 -- not fully revertable, so is not a RevertableProperty.
-type instance CombinedType (RevertableProperty (MetaTypes x) (MetaTypes x')) (Property (MetaTypes y)) = Property (MetaTypes (Combine x y))
-type instance CombinedType (Property (MetaTypes x)) (RevertableProperty (MetaTypes y) (MetaTypes y')) = Property (MetaTypes (Combine x y))
-
-type ResultCombiner = Maybe (Propellor Result) -> Maybe (Propellor Result) -> Maybe (Propellor Result)
+type instance CombinedType RevertableProperty (Property NoInfo) = Property HasInfo
+type instance CombinedType RevertableProperty (Property HasInfo) = Property HasInfo
+type instance CombinedType (Property NoInfo) RevertableProperty = Property HasInfo
+type instance CombinedType (Property HasInfo) RevertableProperty = Property HasInfo
 
 class Combines x y where
 	-- | Combines together two properties, yielding a property that
-	-- has the description and info of the first, and that has the
-	-- second property as a child property.
-	combineWith
-		:: ResultCombiner
+	-- has the description and info of the first, and that has the second
+	-- property as a child. 
+	combineWith 
+		:: (Propellor Result -> Propellor Result -> Propellor Result)
 		-- ^ How to combine the actions to satisfy the properties.
-		-> ResultCombiner
+		-> (Propellor Result -> Propellor Result -> Propellor Result)
 		-- ^ Used when combining revertable properties, to combine
 		-- their reversion actions.
 		-> x
 		-> y
 		-> CombinedType x y
 
-instance (CheckCombinable x y ~ 'CanCombine, SingI (Combine x y)) => Combines (Property (MetaTypes x)) (Property (MetaTypes y)) where
-	combineWith f _ (Property _ d1 a1 i1 c1) (Property _ d2 a2 i2 c2) =
-		Property sing d1 (f a1 a2) i1 (ChildProperty d2 a2 i2 c2 : c1)
-instance (CheckCombinable x y ~ 'CanCombine, CheckCombinable x' y' ~ 'CanCombine, SingI (Combine x y), SingI (Combine x' y')) => Combines (RevertableProperty (MetaTypes x) (MetaTypes x')) (RevertableProperty (MetaTypes y) (MetaTypes y')) where
-	combineWith sf tf (RevertableProperty s1 t1) (RevertableProperty s2 t2) =
+instance Combines (Property HasInfo) (Property HasInfo) where
+	combineWith f _ (IProperty d1 a1 i1 cs1) y@(IProperty _d2 a2 _i2 _cs2) =
+		IProperty d1 (f a1 a2) i1 (y : cs1)
+
+instance Combines (Property HasInfo) (Property NoInfo) where
+	combineWith f _ (IProperty d1 a1 i1 cs1) y@(SProperty _d2 a2 _cs2) =
+		IProperty d1 (f a1 a2) i1 (toIProperty y : cs1)
+
+instance Combines (Property NoInfo) (Property HasInfo) where
+	combineWith f _ (SProperty d1 a1 cs1) y@(IProperty _d2 a2 _i2 _cs2) =
+		IProperty d1 (f a1 a2) mempty (y : map toIProperty cs1)
+
+instance Combines (Property NoInfo) (Property NoInfo) where
+	combineWith f _ (SProperty d1 a1  cs1) y@(SProperty _d2 a2 _cs2) =
+		SProperty d1 (f a1 a2) (y : cs1)
+
+instance Combines RevertableProperty RevertableProperty where
+	combineWith sf tf (RevertableProperty setup1 teardown1) (RevertableProperty setup2 teardown2) =
 		RevertableProperty
-			(combineWith sf tf s1 s2)
-			(combineWith tf sf t1 t2)
-instance (CheckCombinable x y ~ 'CanCombine, SingI (Combine x y)) => Combines (RevertableProperty (MetaTypes x) (MetaTypes x')) (Property (MetaTypes y)) where
+			(combineWith sf tf setup1 setup2)
+			(combineWith tf sf teardown1 teardown2)
+
+instance Combines RevertableProperty (Property HasInfo) where
 	combineWith sf tf (RevertableProperty x _) y = combineWith sf tf x y
-instance (CheckCombinable x y ~ 'CanCombine, SingI (Combine x y)) => Combines (Property (MetaTypes x)) (RevertableProperty (MetaTypes y) (MetaTypes y')) where
+
+instance Combines RevertableProperty (Property NoInfo) where
+	combineWith sf tf (RevertableProperty x _) y = combineWith sf tf x y
+
+instance Combines (Property HasInfo) RevertableProperty where
 	combineWith sf tf x (RevertableProperty y _) = combineWith sf tf x y
 
-class TightenTargets p where
-	-- | Tightens the MetaType list of a Property (or similar),
-	-- to contain fewer targets.
-	--
-	-- For example, to make a property that uses apt-get, which is only
-	-- available on DebianLike systems:
-	--
-	-- > upgraded :: Property DebianLike
-	-- > upgraded = tightenTargets $ cmdProperty "apt-get" ["upgrade"]
-	tightenTargets
-		:: 
-			-- Note that this uses PolyKinds
-			( (Targets untightened `NotSuperset` Targets tightened) ~ 'CanCombine
-			, (NonTargets tightened `NotSuperset` NonTargets untightened) ~ 'CanCombine
-			, SingI tightened
-			)
-		=> p (MetaTypes untightened)
-		-> p (MetaTypes tightened)
-
-instance TightenTargets Property where
-	tightenTargets (Property _ d a i c) = Property sing d a i c
-
--- | Any type of Property is a monoid. When properties x and y are
--- appended together, the resulting property has a description like
--- "x and y". Note that when x fails to be ensured, it will not
--- try to ensure y.
-instance SingI metatypes => Monoid (Property (MetaTypes metatypes))
-  where
-	mempty = Property sing "noop property" Nothing mempty mempty
-	mappend (Property _ d1 a1 i1 c1) (Property _ d2 a2 i2 c2) =
-	  	Property sing d (a1 <> a2) (i1 <> i2) (c1 <> c2)
-	  where
-		-- Avoid including "noop property" in description
-		-- when using eg mconcat.
-		d = case (a1, a2) of
-			(Just _, Just _) -> d1 <> " and " <> d2
-			(Just _, Nothing) -> d1
-			(Nothing, Just _) -> d2
-			(Nothing, Nothing) -> d1
-
--- | Any type of RevertableProperty is a monoid. When revertable 
--- properties x and y are appended together, the resulting revertable
--- property has a description like "x and y".
--- Note that when x fails to be ensured, it will not try to ensure y.
-instance
-	( Monoid (Property setupmetatypes)
-	, Monoid (Property undometatypes)
-	)
-	=> Monoid (RevertableProperty setupmetatypes undometatypes)
-  where
-	mempty = RevertableProperty mempty mempty
-	mappend (RevertableProperty s1 u1) (RevertableProperty s2 u2) =
-		RevertableProperty (s1 <> s2) (u2 <> u1)
+instance Combines (Property NoInfo) RevertableProperty where
+	combineWith sf tf x (RevertableProperty y _) = combineWith sf tf x y

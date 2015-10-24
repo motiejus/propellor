@@ -118,15 +118,13 @@ onChange
         -> CombinedType x y
 onChange = combineWith combiner revertcombiner
   where
-	combiner (Just p) (Just hook) = Just $ do
+	combiner p hook = do
 		r <- p
 		case r of
 			MadeChange -> do
 				r' <- hook
 				return $ r <> r'
 			_ -> return r
-	combiner (Just p) Nothing = Just p
-	combiner Nothing _ = Nothing
 	revertcombiner = (<>)
 
 -- | Same as `onChange` except that if property y fails, a flag file
@@ -144,7 +142,7 @@ onChangeFlagOnFail
         -> CombinedType x y
 onChangeFlagOnFail flagfile = combineWith combiner revertcombiner
   where
-	combiner (Just s1) s2 = Just $ do
+	combiner s1 s2 = do
 		r1 <- s1
 		case r1 of
 			MadeChange -> flagFailed s2
@@ -152,11 +150,8 @@ onChangeFlagOnFail flagfile = combineWith combiner revertcombiner
 				( flagFailed s2
 				, return r1
 				)
-	combiner Nothing _ = Nothing
-
 	revertcombiner = (<>)
-
-	flagFailed (Just s) = do
+	flagFailed s = do
 		r <- s
 		liftIO $ case r of
 			FailedChange -> createFlagFile
@@ -343,13 +338,42 @@ check c p = adjustPropertySatisfy p $ \satisfy ->
 		, return NoChange
 		)
 
--- | Throws an error, for use in `withOS` when a property is lacking
--- support for an OS.
-unsupportedOS' :: Propellor Result
-unsupportedOS' = go =<< getOS
-	  where
-		go Nothing = error "Unknown host OS is not supported by this property."
-		go (Just o) = error $ "This property is not implemented for " ++ show o
+-- | Tries the first property, but if it fails to work, instead uses
+-- the second.
+fallback :: (Combines p1 p2) => p1 -> p2 -> CombinedType p1 p2
+fallback = combineWith combiner revertcombiner
+  where
+	combiner a1 a2 = do
+		r <- a1
+		if r == FailedChange
+			then a2
+			else return r
+	revertcombiner = (<>)
+
+-- | Marks a Property as trivial. It can only return FailedChange or
+-- NoChange. 
+--
+-- Useful when it's just as expensive to check if a change needs
+-- to be made as it is to just idempotently assure the property is
+-- satisfied. For example, chmodding a file.
+trivial :: Property i -> Property i
+trivial p = adjustPropertySatisfy p $ \satisfy -> do
+	r <- satisfy
+	if r == MadeChange
+		then return NoChange
+		else return r
+
+-- | Makes a property that is satisfied differently depending on the host's
+-- operating system. 
+--
+-- Note that the operating system may not be declared for all hosts.
+--
+-- > myproperty = withOS "foo installed" $ \o -> case o of
+-- > 	(Just (System (Debian suite) arch)) -> ...
+-- > 	(Just (System (Ubuntu release) arch)) -> ...
+-- >	Nothing -> ...
+withOS :: Desc -> (Maybe System -> Propellor Result) -> Property NoInfo
+withOS desc a = property desc $ a =<< getOS
 
 -- | Undoes the effect of a RevertableProperty.
 revert :: RevertableProperty setup undo -> RevertableProperty undo setup
