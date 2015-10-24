@@ -1,44 +1,18 @@
 {-# LANGUAGE FlexibleContexts #-}
 
--- | Propellor properties can be made to run concurrently, using this
--- module. This can speed up propellor, at the expense of using more CPUs
--- and other resources.
---
--- It's up to you to make sure that properties that you make run concurrently
--- don't implicitly depend on one-another. The worst that can happen
--- though, is that propellor fails to ensure some of the properties,
--- and tells you what went wrong.
---
--- Another potential problem is that output of concurrent properties could
--- interleave into a scrambled mess. This is mostly prevented; all messages
--- output by propellor are concurrency safe, including `errorMessage`,
--- `infoMessage`, etc. However, if you write a property that directly
--- uses `print` or `putStrLn`, you can still experience this problem.
---
--- Similarly, when properties run external commands, the command's output
--- can be a problem for concurrency. No need to worry;
--- `Propellor.Property.Cmd.createProcess` is concurrent output safe
--- (it actually uses `Propellor.Message.createProcessConcurrent`), and
--- everything else in propellor that runs external commands is built on top
--- of that. Of course, if you import System.Process and use it in a
--- property, you can bypass that and shoot yourself in the foot.
---
--- Finally, anything that directly accesses the tty can bypass
--- these protections. That's sometimes done for eg, password prompts.
--- A well-written property should avoid running interactive commands
--- anyway.
+-- | Note that this module does not yet arrange for any output multiplexing,
+-- so the output of concurrent properties will be scrambled together.
 
 module Propellor.Property.Concurrent (
 	concurrently,
 	concurrentList,
 	props,
 	getNumProcessors,
+	withCapabilities,
 	concurrentSatisfy,
 ) where
 
 import Propellor.Base
-import Propellor.Types.Core
-import Propellor.Types.MetaTypes
 
 import Control.Concurrent
 import qualified Control.Concurrent.Async as A
@@ -46,31 +20,22 @@ import GHC.Conc (getNumProcessors)
 import Control.Monad.RWS.Strict
 
 -- | Ensures two properties concurrently.
---
--- >	& foo `concurrently` bar
---
--- To ensure three properties concurrently, just use this combinator twice:
---
--- >	& foo `concurrently` bar `concurrently` baz
 concurrently
-	:: (IsProp p1, IsProp p2, Combines p1 p2, IsProp (CombinedType p1 p2))
-	=> p1
-	-> p2
-	-> CombinedType p1 p2
-concurrently p1 p2 = (combineWith go go p1 p2)
+	:: (IsProp (Property x), IsProp (Property y), Combines (Property x) (Property y), IsProp (Property (CInfo x y)))
+	=> Property x
+	-> Property y
+	-> CombinedType (Property x) (Property y)
+concurrently p1 p2 = (combineWith go p1 p2)
 	`describe` d
   where
 	d = getDesc p1 ++ " `concurrently` " ++ getDesc p2
 	-- Increase the number of capabilities right up to the number of
 	-- processors, so that A `concurrently` B `concurrently` C
 	-- runs all 3 properties on different processors when possible.
-	go (Just a1) (Just a2) = Just $ do
+	go a1 a2 = do
 		n <- liftIO getNumProcessors
 		withCapabilities n $
 			concurrentSatisfy a1 a2
-	go (Just a1) Nothing = Just a1
-	go Nothing (Just a2) = Just a2
-	go Nothing Nothing = Nothing
 
 -- | Ensures all the properties in the list, with a specified amount of
 -- concurrency.
@@ -82,8 +47,8 @@ concurrently p1 p2 = (combineWith go go p1 p2)
 --
 -- The above example will run foo and bar concurrently, and once either of
 -- those 2 properties finishes, will start running baz.
-concurrentList :: SingI metatypes => IO Int -> Desc -> Props (MetaTypes metatypes) -> Property (MetaTypes metatypes)
-concurrentList getn d (Props ps) = property d go `addChildren` ps
+concurrentList :: IO Int -> Desc -> PropList -> Property HasInfo
+concurrentList getn d (PropList ps) = infoProperty d go mempty ps
   where
 	go = do
 		n <- liftIO getn
@@ -102,11 +67,15 @@ concurrentList getn d (Props ps) = property d go `addChildren` ps
 			(p:rest) -> return (rest, Just p)
 		case v of
 			Nothing -> return r
+			-- This use of propertySatisfy does not lose any
+			-- Info asociated with the property, because
+			-- concurrentList sets all the properties as
+			-- children, and so propigates their info.
 			Just p -> do
 				hn <- asks hostName
-				r' <- case getSatisfy p of
-					Nothing -> return NoChange
-					Just a -> actionMessageOn hn (getDesc p) a
+				r' <- actionMessageOn hn
+					(propertyDesc p)
+					(propertySatisfy p)
 				worker q (r <> r')
 
 -- | Run an action with the number of capabiities increased as necessary to
@@ -126,7 +95,6 @@ withCapabilities n a = bracket setup cleanup (const a)
 		return c
 	cleanup = liftIO . setNumCapabilities
 
--- | Running Propellor actions concurrently.
 concurrentSatisfy :: Propellor Result -> Propellor Result -> Propellor Result
 concurrentSatisfy a1 a2 = do
 	h <- ask
