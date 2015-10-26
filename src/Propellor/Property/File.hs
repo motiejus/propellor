@@ -8,8 +8,8 @@ import Utility.FileMode
 import qualified Data.ByteString.Lazy as L
 import Data.List (isInfixOf, isPrefixOf)
 import System.Posix.Files
+import System.PosixCompat.Types
 import System.Exit
-import Data.Char
 
 type Line = String
 
@@ -159,7 +159,7 @@ link `isSymlinkedTo` (LinkTarget target) = property desc $
 	updateLink = createSymbolicLink target `viaStableTmp` link
 
 -- | Ensures that a file is a copy of another (regular) file.
-isCopyOf :: FilePath -> FilePath -> Property UnixLike
+isCopyOf :: FilePath -> FilePath -> Property NoInfo
 f `isCopyOf` f' = property desc $ go =<< (liftIO $ tryIO $ getFileStatus f')
   where
 	desc = f ++ " is copy of " ++ f'
