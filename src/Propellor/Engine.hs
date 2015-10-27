@@ -13,6 +13,7 @@ module Propellor.Engine (
 import System.Exit
 import System.IO
 import Data.Monoid
+import Control.Applicative
 import "mtl" Control.Monad.RWS.Strict
 import System.PosixCompat
 import System.Posix.IO
@@ -28,7 +29,6 @@ import Propellor.Exception
 import Propellor.Info
 import Propellor.Property
 import Utility.Exception
-import Utility.Directory
 
 -- | Gets the Properties of a Host, and ensures them all,
 -- with nice display of what's being done.
@@ -36,9 +36,7 @@ mainProperties :: Host -> IO ()
 mainProperties host = do
 	ret <- runPropellor host $
 		ensureProperties [ignoreInfo $ infoProperty "overall" (ensureProperties ps) mempty mempty]
-        whenConsole $
-		setTitle "propellor: done"
-	hFlush stdout
+	messagesDone
 	case ret of
 		FailedChange -> exitWith (ExitFailure 1)
 		_ -> exitWith ExitSuccess

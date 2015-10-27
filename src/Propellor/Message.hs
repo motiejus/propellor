@@ -1,3 +1,5 @@
+{-# LANGUAGE PackageImports #-}
+
 -- | This module handles all display of output to the console when
 -- propellor is ensuring Properties.
 --
@@ -13,11 +15,11 @@ module Propellor.Message (
 	warningMessage,
 	infoMessage,
 	errorMessage,
-	stopPropellorMessage,
+	debug,
+	checkDebugMode,
+	enableDebugMode,
 	processChainOutput,
 	messagesDone,
-	createProcessConcurrent,
-	withConcurrentOutput,
 ) where
 
 import System.Console.ANSI
@@ -34,13 +36,13 @@ import System.IO.Unsafe (unsafePerformIO)
 import Control.Concurrent
 
 import Propellor.Types
-import Propellor.Types.Exception
 import Utility.PartialPrelude
 import Utility.Monad
 import Utility.Exception
 
 data MessageHandle = MessageHandle
 	{ isConsole :: Bool
+	, outputLock :: MVar ()
 	}
 
 -- | A shared global variable for the MessageHandle.
@@ -48,15 +50,29 @@ data MessageHandle = MessageHandle
 globalMessageHandle :: MVar MessageHandle
 globalMessageHandle = unsafePerformIO $ do
 	c <- hIsTerminalDevice stdout
-	newMVar $ MessageHandle c
+	o <- newMVar ()
+	newMVar $ MessageHandle c o
 
+-- | Gets the global MessageHandle.
 getMessageHandle :: IO MessageHandle
 getMessageHandle = readMVar globalMessageHandle
 
+-- | Takes a lock while performing an action. Any other threads
+-- that try to lockOutput at the same time will block.
+lockOutput :: (MonadIO m, MonadMask m) => m a -> m a
+lockOutput a = do
+	lck <- liftIO $ outputLock <$> getMessageHandle
+	bracket_ (liftIO $ takeMVar lck) (liftIO $ putMVar lck ()) a
+
+-- | Force console output. This can be used when stdout is not directly
+-- connected to a console, but is eventually going to be displayed at a
+-- console.
 forceConsole :: IO ()
 forceConsole = modifyMVar_ globalMessageHandle $ \mh ->
 	pure (mh { isConsole = True })
 
+-- | Only performs the action when at the console, or when console
+-- output has been forced.
 whenConsole :: IO () -> IO ()
 whenConsole a = whenM (isConsole <$> getMessageHandle) a
 
@@ -70,8 +86,8 @@ actionMessage = actionMessage' Nothing
 actionMessageOn :: (MonadIO m, MonadMask m, ActionResult r) => HostName -> Desc -> m r -> m r
 actionMessageOn = actionMessage' . Just
 
-actionMessage' :: (MonadIO m, ActionResult r) => Maybe HostName -> Desc -> m r -> m r
-actionMessage' mhn desc a = do
+actionMessage' :: (MonadIO m, MonadMask m, ActionResult r) => Maybe HostName -> Desc -> m r -> m r
+actionMessage' mhn desc a = lockOutput $ do
 	liftIO $ whenConsole $ do
 		setTitle $ "propellor: " ++ desc
 		hFlush stdout
@@ -98,21 +114,18 @@ actionMessage' mhn desc a = do
 			setSGR []
 
 warningMessage :: MonadIO m => String -> m ()
-warningMessage s = liftIO $
+warningMessage s = liftIO $ lockOutput $
 	colorLine Vivid Magenta $ "** warning: " ++ s
 
 infoMessage :: MonadIO m => [String] -> m ()
-infoMessage ls = liftIO $ outputConcurrent $ concatMap (++ "\n") ls
+infoMessage ls = liftIO $ lockOutput $
+	mapM_ putStrLn ls
 
--- | Displays the error message in red, and throws an exception.
---
--- When used inside a property, the exception will make the current
--- property fail. Propellor will continue to the next property.
 errorMessage :: MonadIO m => String -> m a
-errorMessage s = liftIO $ do
+errorMessage s = liftIO $ lockOutput $ do
 	colorLine Vivid Red $ "** error: " ++ s
 	error "Cannot continue!"
-
+ 
 colorLine :: ColorIntensity -> Color -> String -> IO ()
 colorLine intensity color msg = do
 	whenConsole $
@@ -130,23 +143,51 @@ colorLine intensity color msg = do
 processChainOutput :: Handle -> IO Result
 processChainOutput h = go Nothing
   where
+	go (Just "1") = enableDebugMode
+	go (Just _) = noop
+	go Nothing = whenM (doesDirectoryExist ".git") $
+		whenM (elem "1" . lines <$> getgitconfig) enableDebugMode
+	getgitconfig = catchDefaultIO "" $
+		readProcess "git" ["config", "propellor.debug"]
+
+enableDebugMode :: IO ()
+enableDebugMode = do
+	f <- setFormatter
+		<$> streamHandler stderr DEBUG
+		<*> pure (simpleLogFormatter "[$time] $msg")
+	updateGlobalLogger rootLoggerName $ 
+		setLevel DEBUG .  setHandlers [f]
+
+-- | Reads and displays each line from the Handle, except for the last line
+-- which is a Result.
+processChainOutput :: Handle -> IO Result
+processChainOutput h = go Nothing
+  where
 	go lastline = do
 		v <- catchMaybeIO (hGetLine h)
+		debug ["read from chained propellor: ", show v]
 		case v of
 			Nothing -> case lastline of
 				Nothing -> do
+					debug ["chained propellor output nothing; assuming it failed"]
 					return FailedChange
 				Just l -> case readish l of
 					Just r -> pure r
 					Nothing -> do
-						outputConcurrent (l ++ "\n")
+						debug ["chained propellor output did not end with a Result; assuming it failed"]
+						lockOutput $ do
+							putStrLn l
+							hFlush stdout
 						return FailedChange
 			Just s -> do
-				outputConcurrent $
-					maybe "" (\l -> if null l then "" else l ++ "\n") lastline
+				lockOutput $ do
+					maybe noop (\l -> unless (null l) (putStrLn l)) lastline
+					hFlush stdout
 				go (Just s)
 
 -- | Called when all messages about properties have been printed.
 messagesDone :: IO ()
-messagesDone = outputConcurrent
-	=<< whenConsole (setTitleCode "propellor: done")
+messagesDone = lockOutput $ do
+	whenConsole $
+		setTitle "propellor: done"
+	hFlush stdout
