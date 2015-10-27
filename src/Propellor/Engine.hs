@@ -36,8 +36,7 @@ mainProperties :: Host -> IO ()
 mainProperties host = do
 	ret <- runPropellor host $
 		ensureProperties [ignoreInfo $ infoProperty "overall" (ensureProperties ps) mempty mempty]
-	h <- mkMessageHandle
-        whenConsole h $
+        whenConsole $
 		setTitle "propellor: done"
 	hFlush stdout
 	case ret of

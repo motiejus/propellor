@@ -22,12 +22,16 @@ module Propellor.Message (
 
 import System.Console.ANSI
 import System.IO
-import Control.Monad.IO.Class (liftIO, MonadIO)
+import System.Log.Logger
+import System.Log.Formatter
+import System.Log.Handler (setFormatter)
+import System.Log.Handler.Simple
+import "mtl" Control.Monad.Reader
+import Control.Applicative
+import System.Directory
+import Control.Monad.IfElse
 import System.IO.Unsafe (unsafePerformIO)
 import Control.Concurrent
-import System.Console.Concurrent
-import Control.Applicative
-import Prelude
 
 import Propellor.Types
 import Propellor.Types.Exception
@@ -42,26 +46,19 @@ data MessageHandle = MessageHandle
 -- | A shared global variable for the MessageHandle.
 {-# NOINLINE globalMessageHandle #-}
 globalMessageHandle :: MVar MessageHandle
-globalMessageHandle = unsafePerformIO $ 
-	newMVar =<< MessageHandle
-		<$> catchDefaultIO False (hIsTerminalDevice stdout)
+globalMessageHandle = unsafePerformIO $ do
+	c <- hIsTerminalDevice stdout
+	newMVar $ MessageHandle c
 
--- | Gets the global MessageHandle.
 getMessageHandle :: IO MessageHandle
 getMessageHandle = readMVar globalMessageHandle
 
--- | Force console output. This can be used when stdout is not directly
--- connected to a console, but is eventually going to be displayed at a
--- console.
 forceConsole :: IO ()
 forceConsole = modifyMVar_ globalMessageHandle $ \mh ->
 	pure (mh { isConsole = True })
 
-whenConsole :: String -> IO String
-whenConsole s = ifM (isConsole <$> getMessageHandle)
-	( pure s
-	, pure ""
-	)
+whenConsole :: IO () -> IO ()
+whenConsole a = whenM (isConsole <$> getMessageHandle) a
 
 -- | Shows a message while performing an action, with a colored status
 -- display.
@@ -75,34 +72,34 @@ actionMessageOn = actionMessage' . Just
 
 actionMessage' :: (MonadIO m, ActionResult r) => Maybe HostName -> Desc -> m r -> m r
 actionMessage' mhn desc a = do
-	liftIO $ outputConcurrent
-		=<< whenConsole (setTitleCode $ "propellor: " ++ desc)
+	liftIO $ whenConsole $ do
+		setTitle $ "propellor: " ++ desc
+		hFlush stdout
 
 	r <- a
 
-	liftIO $ outputConcurrent . concat =<< sequence
-		[ whenConsole $
-			setTitleCode "propellor: running"
-		, showhn mhn
-		, pure $ desc ++ " ... "
-		, let (msg, intensity, color) = getActionResult r
-		  in colorLine intensity color msg
-		]
+	liftIO $ do
+		whenConsole $
+			setTitle "propellor: running"
+		showhn mhn
+		putStr $ desc ++ " ... "
+		let (msg, intensity, color) = getActionResult r
+		colorLine intensity color msg
+		hFlush stdout
 
 	return r
   where
-	showhn Nothing = return ""
-	showhn (Just hn) = concat <$> sequence
-		[ whenConsole $
-			setSGRCode [SetColor Foreground Dull Cyan]
-		, pure (hn ++ " ")
-		, whenConsole $
-			setSGRCode []
-		]
+	showhn Nothing = return ()
+	showhn (Just hn) = do
+		whenConsole $
+			setSGR [SetColor Foreground Dull Cyan]
+		putStr (hn ++ " ")
+		whenConsole $
+			setSGR []
 
 warningMessage :: MonadIO m => String -> m ()
 warningMessage s = liftIO $
-	outputConcurrent =<< colorLine Vivid Magenta ("** warning: " ++ s)
+	colorLine Vivid Magenta $ "** warning: " ++ s
 
 infoMessage :: MonadIO m => [String] -> m ()
 infoMessage ls = liftIO $ outputConcurrent $ concatMap (++ "\n") ls
@@ -113,30 +110,16 @@ infoMessage ls = liftIO $ outputConcurrent $ concatMap (++ "\n") ls
 -- property fail. Propellor will continue to the next property.
 errorMessage :: MonadIO m => String -> m a
 errorMessage s = liftIO $ do
-	outputConcurrent =<< colorLine Vivid Red ("** error: " ++ s)
-	-- Normally this exception gets caught and is not displayed,
-	-- and propellor continues. So it's only displayed if not
-	-- caught, and so we say, cannot continue.
+	colorLine Vivid Red $ "** error: " ++ s
 	error "Cannot continue!"
- 
--- | Like `errorMessage`, but throws a `StopPropellorException`,
--- preventing propellor from continuing to the next property.
---
--- Think twice before using this. Is the problem so bad that propellor
--- cannot try to ensure other properties? If not, use `errorMessage`
--- instead.
-stopPropellorMessage :: MonadIO m => String -> m a
-stopPropellorMessage s = liftIO $ do
-	outputConcurrent =<< colorLine Vivid Red ("** fatal error: " ++ s)
-	throwM $ StopPropellorException "Cannot continue!"
 
-colorLine :: ColorIntensity -> Color -> String -> IO String
-colorLine intensity color msg = concat <$> sequence
-	[ whenConsole $
-		setSGRCode [SetColor Foreground intensity color]
-	, pure msg
-	, whenConsole $
-		setSGRCode []
+colorLine :: ColorIntensity -> Color -> String -> IO ()
+colorLine intensity color msg = do
+	whenConsole $
+		setSGR [SetColor Foreground intensity color]
+	putStr msg
+	whenConsole $
+		setSGR []
 	-- Note this comes after the color is reset, so that
 	-- the color set and reset happen in the same line.
 	, pure "\n"
