@@ -128,7 +128,7 @@ container cn image (Props ps) = Container image (Host cn ps info)
 --
 -- Reverting this property ensures that the container is stopped and
 -- removed.
-docked :: Container -> RevertableProperty (HasInfo + Linux) (HasInfo + Linux)
+docked :: Container -> RevertableProperty HasInfo
 docked ctr@(Container _ h) =
 	(propagateContainerInfo ctr (go "docked" setup))
 		<!>

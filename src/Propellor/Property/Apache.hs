@@ -15,20 +15,27 @@ restarted = Service.restarted "apache2"
 reloaded :: Property DebianLike
 reloaded = Service.reloaded "apache2"
 
-type ConfigLine = String
+-- | A basic virtual host, publishing a directory, and logging to
+-- the combined apache log file.
+virtualHost :: HostName -> Port -> FilePath -> RevertableProperty NoInfo
+virtualHost hn (Port p) docroot = siteEnabled hn
+	[ "<VirtualHost *:"++show p++">"
+	, "ServerName "++hn++":"++show p
+	, "DocumentRoot " ++ docroot
+	, "ErrorLog /var/log/apache2/error.log"
+	, "LogLevel warn"
+	, "CustomLog /var/log/apache2/access.log combined"
+	, "ServerSignature On"
+	, "</VirtualHost>"
+	]
 
 type ConfigFile = [ConfigLine]
 
-siteEnabled :: Domain -> ConfigFile -> RevertableProperty DebianLike DebianLike
-siteEnabled domain cf = siteEnabled' domain cf <!> siteDisabled domain
-
-siteEnabled' :: Domain -> ConfigFile -> Property DebianLike
-siteEnabled' domain cf = combineProperties ("apache site enabled " ++ domain) $ props
-	& siteAvailable domain cf
-		`requires` installed
-		`onChange` reloaded
-	& check (not <$> isenabled)
-		(cmdProperty "a2ensite" ["--quiet", domain])
+siteEnabled :: HostName -> ConfigFile -> RevertableProperty NoInfo
+siteEnabled hn cf = enable <!> disable
+  where
+	enable = combineProperties ("apache site enabled " ++ hn)
+		[ siteAvailable hn cf
 			`requires` installed
 			`onChange` reloaded
   where
@@ -49,7 +56,7 @@ siteAvailable domain cf = combineProperties ("apache site available " ++ domain)
   where
 	comment = "# deployed with propellor, do not modify"
 
-modEnabled :: String -> RevertableProperty DebianLike DebianLike
+modEnabled :: String -> RevertableProperty NoInfo
 modEnabled modname = enable <!> disable
   where
 	enable = check (not <$> isenabled)

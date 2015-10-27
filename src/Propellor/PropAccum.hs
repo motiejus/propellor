@@ -1,9 +1,4 @@
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE PackageImports, FlexibleContexts #-}
 
 module Propellor.PropAccum
 	( host
@@ -79,7 +74,7 @@ Props c & p = Props (c ++ [toChildProperty p])
 Props c &^ p = Props (toChildProperty p : c)
 
 -- | Adds a property in reverted form.
-(!) :: PropAccum h => h -> RevertableProperty -> h
+(!) :: IsProp (RevertableProperty i) => PropAccum h => h -> RevertableProperty i -> h
 h ! p = h & revert p
 
 infixl 1 &

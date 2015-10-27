@@ -103,7 +103,7 @@ disabled n = tightenTargets $ cmdProperty "systemctl" ["disable", n]
 	`describe` ("service " ++ n ++ " disabled")
 
 -- | Masks a systemd service.
-masked :: ServiceName -> RevertableProperty Linux Linux
+masked :: ServiceName -> RevertableProperty NoInfo
 masked n = systemdMask <!> systemdUnmask
   where
 	systemdMask = tightenTargets $ cmdProperty "systemctl" ["mask", n]
@@ -239,7 +239,7 @@ container name system mkchroot = Container name c h
 --
 -- Reverting this property stops the container, removes the systemd unit,
 -- and deletes the chroot and all its contents.
-nspawned :: Container -> RevertableProperty
+nspawned :: Container -> RevertableProperty HasInfo
 nspawned c@(Container name (Chroot.Chroot loc builder _) h) =
 	p `describe` ("nspawned " ++ name)
   where
@@ -266,7 +266,7 @@ nspawned c@(Container name (Chroot.Chroot loc builder _) h) =
 
 -- | Sets up the service file for the container, and then starts
 -- it running.
-nspawnService :: Container -> ChrootCfg -> RevertableProperty Linux Linux
+nspawnService :: Container -> ChrootCfg -> RevertableProperty NoInfo
 nspawnService (Container name _ _) cfg = setup <!> teardown
   where
 	service = nspawnServiceName name
@@ -323,9 +323,8 @@ nspawnServiceParams (SystemdNspawnCfg ps) =
 --
 -- This uses nsenter to enter the container, by looking up the pid of the
 -- container's init process and using its namespace.
-enterScript :: Container -> RevertableProperty Linux Linux
-enterScript c@(Container name _ _) =
-	tightenTargets setup <!> tightenTargets teardown
+enterScript :: Container -> RevertableProperty NoInfo
+enterScript c@(Container name _ _) = setup <!> teardown
   where
 	setup = combineProperties ("generated " ++ enterScriptFile c) $ props
 		& scriptfile `File.hasContent`
@@ -369,7 +368,7 @@ mungename = replace "/" "_"
 -- When there is no leading dash, "--" is prepended to the parameter.
 --
 -- Reverting the property will remove a parameter, if it's present.
-containerCfg :: String -> RevertableProperty (HasInfo + Linux) (HasInfo + Linux)
+containerCfg :: String -> RevertableProperty HasInfo
 containerCfg p = RevertableProperty (mk True) (mk False)
   where
 	mk b = tightenTargets $
@@ -384,18 +383,18 @@ containerCfg p = RevertableProperty (mk True) (mk False)
 -- | Bind mounts </etc/resolv.conf> from the host into the container.
 --
 -- This property is enabled by default. Revert it to disable it.
-resolvConfed :: RevertableProperty (HasInfo + Linux) (HasInfo + Linux)
+resolvConfed :: RevertableProperty HasInfo
 resolvConfed = containerCfg "bind=/etc/resolv.conf"
 
 -- | Link the container's journal to the host's if possible.
 -- (Only works if the host has persistent journal enabled.)
 --
 -- This property is enabled by default. Revert it to disable it.
-linkJournal :: RevertableProperty (HasInfo + Linux) (HasInfo + Linux)
+linkJournal :: RevertableProperty HasInfo
 linkJournal = containerCfg "link-journal=try-guest"
 
 -- | Disconnect networking of the container from the host.
-privateNetwork :: RevertableProperty (HasInfo + Linux) (HasInfo + Linux)
+privateNetwork :: RevertableProperty HasInfo
 privateNetwork = containerCfg "private-network"
 
 class Publishable a where
@@ -433,7 +432,7 @@ instance Publishable (Proto, Bound Port) where
 -- >	& Systemd.running Systemd.networkd
 -- >	& Systemd.publish (Port 80 ->- Port 8080)
 -- >	& Apt.installedRunning "apache2"
-publish :: Publishable p => p -> RevertableProperty (HasInfo + Linux) (HasInfo + Linux)
+publish :: Publishable p => p -> RevertableProperty HasInfo
 publish p = containerCfg $ "--port=" ++ toPublish p
 
 class Bindable a where
@@ -446,9 +445,9 @@ instance Bindable (Bound FilePath) where
 	toBind v = hostSide v ++ ":" ++ containerSide v
 
 -- | Bind mount a file or directory from the host into the container.
-bind :: Bindable p => p -> RevertableProperty (HasInfo + Linux) (HasInfo + Linux)
+bind :: Bindable p => p -> RevertableProperty HasInfo
 bind p = containerCfg $ "--bind=" ++ toBind p
 
 -- | Read-only mind mount.
-bindRo :: Bindable p => p -> RevertableProperty (HasInfo + Linux) (HasInfo + Linux)
+bindRo :: Bindable p => p -> RevertableProperty HasInfo
 bindRo p = containerCfg $ "--bind-ro=" ++ toBind p

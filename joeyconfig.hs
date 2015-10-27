@@ -619,13 +619,13 @@ myDnsSecondary = propertyList "dns secondary for all my domains" $ props
 	& Dns.secondary hosts "ikiwiki.info"
 	& Dns.secondary hosts "olduse.net"
 
-branchableSecondary :: RevertableProperty (HasInfo + DebianLike) DebianLike
+branchableSecondary :: RevertableProperty HasInfo
 branchableSecondary = Dns.secondaryFor ["branchable.com"] hosts "branchable.com"
 
 -- Currently using kite (ns4) as primary with secondaries
 -- elephant (ns3) and gandi.
 -- kite handles all mail.
-myDnsPrimary :: Bool -> Domain -> [(BindDomain, Record)] -> RevertableProperty (HasInfo + DebianLike) DebianLike
+myDnsPrimary :: Bool -> Domain -> [(BindDomain, Record)] -> RevertableProperty HasInfo
 myDnsPrimary dnssec domain extras = (if dnssec then Dns.signedPrimary (Weekly Nothing) else Dns.primary) hosts domain
 	(Dns.mkSOA "ns4.kitenet.net" 100) $
 	[ (RootDomain, NS $ AbsDomain "ns4.kitenet.net")

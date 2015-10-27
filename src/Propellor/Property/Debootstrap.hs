@@ -95,7 +95,7 @@ extractSuite (System (FreeBSD _) _) = Nothing
 -- When necessary, falls back to installing debootstrap from source.
 -- Note that installation from source is done by downloading the tarball
 -- from a Debian mirror, with no cryptographic verification.
-installed :: RevertableProperty Linux Linux
+installed :: RevertableProperty NoInfo
 installed = install <!> remove
   where
 	install = check (isNothing <$> programPath) $
