@@ -42,7 +42,7 @@ instance Show Locker where
 -- | A shared global variable for the OutputHandle.
 {-# NOINLINE globalOutputHandle #-}
 globalOutputHandle :: MVar OutputHandle
-globalOutputHandle = unsafePerformIO $ 
+globalOutputHandle = unsafePerformIO $
 	newMVar =<< OutputHandle
 		<$> newTMVarIO Nothing
 
@@ -102,7 +102,7 @@ takeOutputLock' block = go =<< withLock tryTakeTMVar
 	havelock = do
 		withLock (`putTMVar` Just GeneralLock)
 		return True
-	
+
 	-- Wait for current lock holder (if any) to relinquish
 	-- it and take the lock for ourselves.
 	waitlock = withLock $ \l -> do
@@ -112,7 +112,7 @@ takeOutputLock' block = go =<< withLock tryTakeTMVar
 			_ -> do
 				putTMVar l (Just GeneralLock)
 				return True
-	
+
 	whenblock a = if block then a else return False
 
 -- | Only safe to call after taking the output lock.
@@ -153,7 +153,7 @@ outputConcurrent s = do
 	hFlush stdout
 	-- TODO
 
--- | Wrapper around `System.Process.createProcess` that prevents 
+-- | Wrapper around `System.Process.createProcess` that prevents
 -- multiple processes that are running concurrently from writing
 -- to stdout/stderr at the same time.
 --
@@ -169,7 +169,7 @@ outputConcurrent s = do
 -- the process is instead run with its stdout and stderr
 -- redirected to a buffer. The buffered output will be displayed as soon
 -- as the output lock becomes free.
-createProcessConcurrent :: P.CreateProcess -> IO (Maybe Handle, Maybe Handle, Maybe Handle, P.ProcessHandle) 
+createProcessConcurrent :: P.CreateProcess -> IO (Maybe Handle, Maybe Handle, Maybe Handle, P.ProcessHandle)
 createProcessConcurrent p
 	| willOutput (P.std_out p) || willOutput (P.std_err p) =
 		ifM tryTakeOutputLock
@@ -194,7 +194,7 @@ createProcessConcurrent p
 		-- is running now, and once it exits the output lock will
 		-- be stale and can then be taken by something else.
 		return r
-	
+
 	concurrentprocess = do
 		(toouth, fromouth) <- pipe
 		(toerrh, fromerrh) <- pipe
@@ -243,9 +243,8 @@ outputDrainer ss fromh toh buf
 	atend = do
 		modifyMVar_ buf $ pure . (++ [(toh, ReachedEnd)])
 		hClose fromh
-		
 
--- Wait to lock output, and once we can, display everything 
+-- Wait to lock output, and once we can, display everything
 -- that's put into buffer, until the end is signaled by Nothing
 -- for both stdout and stderr.
 bufferWriter :: MVar Buffer -> IO ()
