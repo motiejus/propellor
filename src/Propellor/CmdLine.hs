@@ -95,7 +95,6 @@ data CanRebuild = CanRebuild | NoRebuild
 -- | Runs propellor on hosts, as controlled by command-line options.
 defaultMain :: [Host] -> IO ()
 defaultMain hostlist = withConcurrentOutput $ do
-	useFileSystemEncoding
 	Shim.cleanEnv
 	checkDebugMode
 	cmdline <- processCmdLine

@@ -32,8 +32,19 @@ import Prelude
 
 main :: IO ()
 main = withConcurrentOutput $ do
-	useFileSystemEncoding
-	go =<< getArgs
+	args <- getArgs
+	home <- myHomeDir
+	let propellordir = home </> ".propellor"
+	let propellorbin = propellordir </> "propellor"
+	wrapper args propellordir propellorbin
+
+wrapper :: [String] -> FilePath -> FilePath -> IO ()
+wrapper args propellordir propellorbin = do
+	ifM (doesDirectoryExist propellordir)
+		( checkRepo 
+		, makeRepo
+		)
+	buildruncfg
   where
 	go ["--init"] = interactiveInit
 	go args = ifM configInCurrentWorkingDirectory
