@@ -200,6 +200,7 @@ Library
     Propellor.Shim
     Propellor.Property.Chroot.Util
     Utility.Applicative
+    Utility.ConcurrentOutput
     Utility.Data
     Utility.DataUnits
     Utility.Directory
