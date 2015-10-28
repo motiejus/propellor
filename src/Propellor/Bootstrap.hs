@@ -93,42 +93,7 @@ depsCommand msys = "( " ++ intercalate " ; " (concat [osinstall, cabalinstall]) 
 		, "libghc-transformers-dev"
 		, "libghc-exceptions-dev"
 		, "libghc-stm-dev"
-		, "libghc-text-dev"
-		]
-	fbsddeps =
-		[ "gnupg"
-		, "ghc"
-		, "hs-cabal-install"
-		, "hs-async"
-		, "hs-MissingH"
-		, "hs-hslogger"
-		, "hs-unix-compat"
-		, "hs-ansi-terminal"
-		, "hs-IfElse"
-		, "hs-network"
-		, "hs-mtl"
-		, "hs-transformers-base"
-		, "hs-exceptions"
-		, "hs-stm"
-		, "hs-text"
-		]
-	archlinuxdeps =
-		[ "gnupg"
-		, "ghc"
-		, "cabal-install"
-		, "haskell-async"
-		, "haskell-missingh"
-		, "haskell-hslogger"
-		, "haskell-unix-compat"
-		, "haskell-ansi-terminal"
-		, "haskell-hackage-security"
-		, "haskell-ifelse"
-		, "haskell-network"
-		, "haskell-mtl"
-		, "haskell-transformers-base"
-		, "haskell-exceptions"
-		, "haskell-stm"
-		, "haskell-text"
+		, "make"
 		]
 
 installGitCommand :: Maybe System -> ShellCommand

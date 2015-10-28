@@ -37,45 +37,38 @@ Description:
 
 Executable propellor
   Main-Is: wrapper.hs
-  GHC-Options: -threaded -Wall -fno-warn-tabs -O0
-  if impl(ghc >= 8.0)
-    GHC-Options: -fno-warn-redundant-constraints
-  Extensions: TypeOperators
-  Hs-Source-Dirs: src
-  Build-Depends:
-    -- propellor needs to support the ghc shipped in Debian stable,
-    -- and also only depends on packages in Debian stable.
-    base >= 4.5, base < 5,
-    MissingH, directory, filepath, IfElse, process, bytestring, hslogger,
-    unix, unix-compat, ansi-terminal, containers (>= 0.5), network, async,
-    time, mtl, transformers, exceptions (>= 0.6), stm, text
-  Other-Modules:
-    Propellor.DotDir
+  GHC-Options: -threaded -O0 -Wall -fno-warn-tabs
+  Hs-Source-Dirs:  src
+  Build-Depends: MissingH, directory, filepath, base >= 4.5, base < 5,
+   IfElse, process, bytestring, hslogger, unix-compat, ansi-terminal,
+   containers (>= 0.5), network, async, time, QuickCheck, mtl, transformers,
+   exceptions (>= 0.6), stm
+
+  if (! os(windows))
+    Build-Depends: unix
 
 Executable propellor-config
   Main-Is: config.hs
-  GHC-Options: -threaded -Wall -fno-warn-tabs -O0
-  if impl(ghc >= 8.0)
-    GHC-Options: -fno-warn-redundant-constraints
-  Extensions: TypeOperators
-  Hs-Source-Dirs: src
-  Build-Depends:
-    base >= 4.5, base < 5,
-    MissingH, directory, filepath, IfElse, process, bytestring, hslogger,
-    unix, unix-compat, ansi-terminal, containers (>= 0.5), network, async,
-    time, mtl, transformers, exceptions (>= 0.6), stm, text
+  GHC-Options: -threaded -O0 -Wall -fno-warn-tabs
+  Hs-Source-Dirs:  src
+  Build-Depends: MissingH, directory, filepath, base >= 4.5, base < 5,
+   IfElse, process, bytestring, hslogger, unix-compat, ansi-terminal,
+   containers (>= 0.5), network, async, time, QuickCheck, mtl, transformers,
+   exceptions, stm
+
+  if (! os(windows))
+    Build-Depends: unix
 
 Library
-  GHC-Options: -Wall -fno-warn-tabs -O0
-  if impl(ghc >= 8.0)
-    GHC-Options: -fno-warn-redundant-constraints
-  Extensions: TypeOperators
-  Hs-Source-Dirs: src
-  Build-Depends:
-    base >= 4.5, base < 5,
-    MissingH, directory, filepath, IfElse, process, bytestring, hslogger,
-    unix, unix-compat, ansi-terminal, containers (>= 0.5), network, async,
-    time, mtl, transformers, exceptions (>= 0.6), stm, text
+  GHC-Options: -O0 -Wall -fno-warn-tabs
+  Hs-Source-Dirs:  src
+  Build-Depends: MissingH, directory, filepath, base >= 4.5, base < 5,
+   IfElse, process, bytestring, hslogger, unix-compat, ansi-terminal,
+   containers (>= 0.5), network, async, time, QuickCheck, mtl, transformers,
+   exceptions, stm
+
+  if (! os(windows))
+    Build-Depends: unix
 
   Exposed-Modules:
     Propellor
