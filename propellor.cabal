@@ -42,7 +42,7 @@ Executable propellor
   Build-Depends: MissingH, directory, filepath, base >= 4.5, base < 5,
    IfElse, process, bytestring, hslogger, unix-compat, ansi-terminal,
    containers (>= 0.5), network, async, time, QuickCheck, mtl, transformers,
-   exceptions (>= 0.6), stm
+   exceptions (>= 0.6), stm, text
 
   if (! os(windows))
     Build-Depends: unix
@@ -54,7 +54,7 @@ Executable propellor-config
   Build-Depends: MissingH, directory, filepath, base >= 4.5, base < 5,
    IfElse, process, bytestring, hslogger, unix-compat, ansi-terminal,
    containers (>= 0.5), network, async, time, QuickCheck, mtl, transformers,
-   exceptions, stm
+   exceptions, stm, text
 
   if (! os(windows))
     Build-Depends: unix
@@ -65,7 +65,7 @@ Library
   Build-Depends: MissingH, directory, filepath, base >= 4.5, base < 5,
    IfElse, process, bytestring, hslogger, unix-compat, ansi-terminal,
    containers (>= 0.5), network, async, time, QuickCheck, mtl, transformers,
-   exceptions, stm
+   exceptions, stm, text
 
   if (! os(windows))
     Build-Depends: unix
