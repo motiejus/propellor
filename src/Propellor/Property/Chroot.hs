@@ -226,8 +226,9 @@ chain hostlist (ChrootChain hn loc systemdonly onconsole) =
 		onlyProcess (provisioningLock loc) $ do
 			r <- runPropellor (setInChroot h) $ ensureProperties $
 				if systemdonly
-					then [toChildProperty Systemd.installed]
-					else hostProperties h
+					then [Systemd.installed]
+					else map ignoreInfo $
+						hostProperties h
 			flushConcurrentOutput
 			putStrLn $ "\n" ++ show r
 chain _ _ = errorMessage "bad chain command"

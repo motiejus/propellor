@@ -595,7 +595,9 @@ chain hostlist hn s = case toContainerId s of
 	go cid h = do
 		changeWorkingDirectory localdir
 		onlyProcess (provisioningLock cid) $ do
-			r <- runPropellor h $ ensureChildProperties $ hostProperties h
+			r <- runPropellor h $ ensureProperties $
+				map ignoreInfo $
+					hostProperties h
 			flushConcurrentOutput
 			putStrLn $ "\n" ++ show r
 
