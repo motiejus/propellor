@@ -32,7 +32,7 @@ import Propellor.Types.Info
 import qualified Propellor.Shim as Shim
 import Utility.FileMode
 import Utility.SafeCommand
-import Utility.Process.NonConcurrent
+import Utility.ConcurrentOutput
 
 commitSpin :: IO ()
 commitSpin = do
@@ -86,8 +86,9 @@ spin' mprivdata relay target hst = do
 		getprivdata
 
 	-- And now we can run it.
-	unlessM (boolSystemNonConcurrent "ssh" (map Param $ cacheparams ++ ["-t", sshtarget, shellWrap runcmd])) $
-		giveup "remote propellor failed"
+	flushConcurrentOutput
+	unlessM (boolSystem "ssh" (map Param $ cacheparams ++ ["-t", sshtarget, shellWrap runcmd])) $
+		error "remote propellor failed"
   where
 	hn = fromMaybe target relay
 
