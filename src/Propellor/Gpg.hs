@@ -16,8 +16,8 @@ import Utility.Process.NonConcurrent
 import Utility.Monad
 import Utility.Misc
 import Utility.Tmp
-import Utility.Env
-import Utility.Directory
+import Utility.FileSystemEncoding
+import Utility.ConcurrentOutput
 
 type KeyId = String
 
@@ -158,7 +158,7 @@ gitCommitKeyRing action = do
 	privdata <- privDataFile
 	-- Commit explicitly the keyring and privdata files, as other
 	-- changes may be staged by the user and shouldn't be committed.
-	tocommit <- filterM doesFileExist [ privdata, keyring]
+	tocommit <- filterM doesFileExist [ privDataFile, keyring]
 	gitCommit (Just ("propellor " ++ action)) (map File tocommit)
 
 -- Adds --gpg-sign if there's a keyring.
@@ -173,10 +173,15 @@ gpgSignParams ps = do
 -- Automatically sign the commit if there'a a keyring.
 gitCommit :: Maybe String -> [CommandParam] -> IO Bool
 gitCommit msg ps = do
-	let ps' = Param "commit" : ps ++
+	let ps' = Param "commit" : ps ++ 
 		maybe [] (\m -> [Param "-m", Param m]) msg
 	ps'' <- gpgSignParams ps'
-	boolSystemNonConcurrent "git" ps''
+	if isNothing msg
+		then do
+			(_, _, _, p) <- createProcessForeground $
+				proc "git" (toCommand ps'')
+			checkSuccessProcess p
+		else boolSystem "git" ps''
 
 gpgDecrypt :: FilePath -> IO String
 gpgDecrypt f = do

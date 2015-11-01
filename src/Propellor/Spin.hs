@@ -54,7 +54,7 @@ commitSpin = do
 			error "spin aborted: commit changes first"
 
 	void $ actionMessage "Git commit" $
-		gitCommit (Just spinCommitMessage)
+		gitCommit (Just spinCommitMessage) 
 			[Param "--allow-empty", Param "-a"]
 	-- Push to central origin repo first, if possible.
 	-- The remote propellor will pull from there, which avoids
