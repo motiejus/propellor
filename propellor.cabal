@@ -193,7 +193,6 @@ Library
     Propellor.Shim
     Propellor.Property.Chroot.Util
     Utility.Applicative
-    Utility.ConcurrentOutput
     Utility.Data
     Utility.DataUnits
     Utility.Directory
@@ -217,6 +216,7 @@ Library
     Utility.ThreadScheduler
     Utility.Tmp
     Utility.UserInfo
+    Utility.QuickCheck
     System.Console.Concurrent
     System.Console.Concurrent.Internal
     System.Process.Concurrent

@@ -29,24 +29,11 @@ import qualified Propellor.Property.Systemd.Core as Systemd
 import qualified Propellor.Property.File as File
 import qualified Propellor.Shim as Shim
 import Propellor.Property.Mount
-import Utility.ConcurrentOutput
 
 import qualified Data.Map as M
 import Data.List.Utils
 import System.Posix.Directory
 import System.Console.Concurrent
-
--- | Specification of a chroot. Normally you'll use `debootstrapped` or
--- `bootstrapped` to construct a Chroot value.
-data Chroot where
-	Chroot :: ChrootBootstrapper b => FilePath -> b -> InfoPropagator -> Host -> Chroot
-
-instance IsContainer Chroot where
-	containerProperties (Chroot _ _ _ h) = containerProperties h
-	containerInfo (Chroot _ _ _ h) = containerInfo h
-	setContainerProperties (Chroot loc b p h) ps =
-		let h' = setContainerProperties h ps
-		in Chroot loc b p h'
 
 -- | Specification of a chroot. Normally you'll use `debootstrapped` or
 -- `bootstrapped` to construct a Chroot value.

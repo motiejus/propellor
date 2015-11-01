@@ -1,13 +1,9 @@
 {-# LANGUAGE BangPatterns, TypeSynonymInstances, FlexibleInstances, TupleSections #-}
-{-# LANGUAGE CPP #-}
-{-# OPTIONS_GHC -O2 #-}
-{- Building this module with -O0 causes streams not to fuse and too much
- - memory to be used. -}
 
--- | 
+-- |
 -- Copyright: 2015 Joey Hess <id@joeyh.name>
 -- License: BSD-2-clause
--- 
+--
 -- Concurrent output handling, internals.
 --
 -- May change at any time.
@@ -15,13 +11,12 @@
 module System.Console.Concurrent.Internal where
 
 import System.IO
-#ifndef mingw32_HOST_OS
 import System.Posix.IO
-#endif
 import System.Directory
 import System.Exit
 import Control.Monad
 import Control.Monad.IO.Class (liftIO, MonadIO)
+import Control.Applicative
 import System.IO.Unsafe (unsafePerformIO)
 import Control.Concurrent
 import Control.Concurrent.STM
@@ -32,8 +27,6 @@ import Data.Monoid
 import qualified System.Process as P
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import Control.Applicative
-import Prelude
 
 import Utility.Monad
 import Utility.Exception
@@ -117,20 +110,21 @@ withConcurrentOutput :: (MonadIO m, MonadMask m) => m a -> m a
 withConcurrentOutput a = a `finally` liftIO flushConcurrentOutput
 
 -- | Blocks until any processes started by `createProcessConcurrent` have
--- finished, and any buffered output is displayed. Also blocks while
--- `lockOutput` is is use.
+-- finished, and any buffered output is displayed.
 --
--- `withConcurrentOutput` calls this at the end, so you do not normally
--- need to use this.
+-- `withConcurrentOutput` calls this at the end; you can call it anytime
+-- you want to flush output.
 flushConcurrentOutput :: IO ()
 flushConcurrentOutput = do
+	-- Wait for all outputThreads to finish.
+	let v = outputThreads globalOutputHandle
 	atomically $ do
-		r <- takeTMVar (outputThreads globalOutputHandle)
+		r <- takeTMVar v
 		if r <= 0
-			then putTMVar (outputThreads globalOutputHandle) r
+			then putTMVar v r
 			else retry
-	-- Take output lock to wait for anything else that might be
-	-- currently generating output.
+	-- Take output lock to ensure that nothing else is currently
+	-- generating output, and flush any buffered output.
 	lockOutput $ return ()
 
 -- | Values that can be output.
@@ -155,58 +149,47 @@ instance Outputable String where
 -- not block. It buffers the value, so it will be displayed once the other
 -- writer is done.
 outputConcurrent :: Outputable v => v -> IO ()
-outputConcurrent = outputConcurrent' StdOut
-
--- | Like `outputConcurrent`, but displays to stderr.
---
--- (Does not throw an exception.)
-errorConcurrent :: Outputable v => v -> IO ()
-errorConcurrent = outputConcurrent' StdErr
-
-outputConcurrent' :: Outputable v => StdHandle -> v -> IO ()
-outputConcurrent' stdh v = bracket setup cleanup go
+outputConcurrent v = bracket setup cleanup go
   where
 	setup = tryTakeOutputLock
 	cleanup False = return ()
 	cleanup True = dropOutputLock
 	go True = do
-		T.hPutStr h (toOutput v)
-		hFlush h
+		T.hPutStr stdout (toOutput v)
+		hFlush stdout
 	go False = do
+		let bv = outputBuffer globalOutputHandle
 		oldbuf <- atomically $ takeTMVar bv
 		newbuf <- addOutputBuffer (Output (toOutput v)) oldbuf
 		atomically $ putTMVar bv newbuf
-	h = toHandle stdh
-	bv = bufferFor stdh
 
 newtype ConcurrentProcessHandle = ConcurrentProcessHandle P.ProcessHandle
 
 toConcurrentProcessHandle :: (Maybe Handle, Maybe Handle, Maybe Handle, P.ProcessHandle) -> (Maybe Handle, Maybe Handle, Maybe Handle, ConcurrentProcessHandle)
 toConcurrentProcessHandle (i, o, e, h) = (i, o, e, ConcurrentProcessHandle h)
 
--- | Use this to wait for processes started with 
+-- | Use this to wait for processes started with
 -- `createProcessConcurrent` and `createProcessForeground`, and get their
 -- exit status.
 --
 -- Note that such processes are actually automatically waited for
--- internally, so not calling this explicitly will not result
+-- internally, so not calling this exiplictly will not result
 -- in zombie processes. This behavior differs from `P.waitForProcess`
 waitForProcessConcurrent :: ConcurrentProcessHandle -> IO ExitCode
-waitForProcessConcurrent (ConcurrentProcessHandle h) = 
-	bracket lock unlock checkexit
+waitForProcessConcurrent (ConcurrentProcessHandle h) = checkexit
   where
+	checkexit = maybe waitsome return =<< P.getProcessExitCode h
+	waitsome = maybe checkexit return =<< bracket lock unlock go
 	lck = waitForProcessLock globalOutputHandle
 	lock = atomically $ tryPutTMVar lck ()
 	unlock True = atomically $ takeTMVar lck
 	unlock False = return ()
-	checkexit locked = maybe (waitsome locked) return
-		=<< P.getProcessExitCode h
-	waitsome True = do
+	go True = do
 		let v = processWaiters globalOutputHandle
 		l <- atomically $ readTMVar v
 		if null l
-			-- Avoid waitAny [] which blocks forever
-			then P.waitForProcess h
+			-- Avoid waitAny [] which blocks forever;
+			then Just <$> P.waitForProcess h
 			else do
 				-- Wait for any of the running
 				-- processes to exit. It may or may not
@@ -214,14 +197,15 @@ waitForProcessConcurrent (ConcurrentProcessHandle h) =
 				-- ProcessHandle. If it is,
 				-- getProcessExitCode will succeed.
 				void $ tryIO $ waitAny l
-				checkexit True
-	waitsome False = do
+				hFlush stdout
+				return Nothing
+	go False = do
 		-- Another thread took the lck first. Wait for that thread to
 		-- wait for one of the running processes to exit.
 		atomically $ do
 			putTMVar lck ()
 			takeTMVar lck
-		checkexit False
+		return Nothing
 
 -- Registers an action that waits for a process to exit,
 -- adding it to the processWaiters list, and removing it once the action
@@ -243,7 +227,7 @@ asyncProcessWaiter waitaction = do
 		l <- takeTMVar v
 		putTMVar v (filter (/= waiter) l)
 
--- | Wrapper around `System.Process.createProcess` that prevents 
+-- | Wrapper around `System.Process.createProcess` that prevents
 -- multiple processes that are running concurrently from writing
 -- to stdout/stderr at the same time.
 --
@@ -259,10 +243,7 @@ asyncProcessWaiter waitaction = do
 -- the process is instead run with its stdout and stderr
 -- redirected to a buffer. The buffered output will be displayed as soon
 -- as the output lock becomes free.
---
--- Currently only available on Unix systems, not Windows.
-#ifndef mingw32_HOST_OS
-createProcessConcurrent :: P.CreateProcess -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ConcurrentProcessHandle) 
+createProcessConcurrent :: P.CreateProcess -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ConcurrentProcessHandle)
 createProcessConcurrent p
 	| willOutput (P.std_out p) || willOutput (P.std_err p) =
 		ifM tryTakeOutputLock
@@ -271,10 +252,9 @@ createProcessConcurrent p
 			)
 	| otherwise = do
 		r@(_, _, _, h) <- P.createProcess p
-		asyncProcessWaiter $
-			void $ tryIO $ P.waitForProcess h
+		asyncProcessWaiter $ do
+			void $ P.waitForProcess h
 		return (toConcurrentProcessHandle r)
-#endif
 
 -- | Wrapper around `System.Process.createProcess` that makes sure a process
 -- is run in the foreground, with direct access to stdout and stderr.
@@ -288,15 +268,12 @@ fgProcess :: P.CreateProcess -> IO (Maybe Handle, Maybe Handle, Maybe Handle, Co
 fgProcess p = do
 	r@(_, _, _, h) <- P.createProcess p
 		`onException` dropOutputLock
-	registerOutputThread
 	-- Wait for the process to exit and drop the lock.
 	asyncProcessWaiter $ do
-		void $ tryIO $ P.waitForProcess h
-		unregisterOutputThread
+		void $ P.waitForProcess h
 		dropOutputLock
 	return (toConcurrentProcessHandle r)
 
-#ifndef mingw32_HOST_OS
 bgProcess :: P.CreateProcess -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ConcurrentProcessHandle)
 bgProcess p = do
 	(toouth, fromouth) <- pipe
@@ -308,7 +285,7 @@ bgProcess p = do
 	registerOutputThread
 	r@(_, _, _, h) <- P.createProcess p'
 		`onException` unregisterOutputThread
-	asyncProcessWaiter $ void $ tryIO $ P.waitForProcess h
+	asyncProcessWaiter $ void $ P.waitForProcess h
 	outbuf <- setupOutputBuffer StdOut toouth (P.std_out p) fromouth
 	errbuf <- setupOutputBuffer StdErr toerrh (P.std_err p) fromerrh
 	void $ async $ bufferWriter [outbuf, errbuf]
@@ -320,7 +297,6 @@ bgProcess p = do
 	rediroutput ss h
 		| willOutput ss = P.UseHandle h
 		| otherwise = ss
-#endif
 
 willOutput :: P.StdStream -> Bool
 willOutput P.Inherit = True
@@ -387,13 +363,13 @@ registerOutputThread :: IO ()
 registerOutputThread = do
 	let v = outputThreads globalOutputHandle
 	atomically $ putTMVar v . succ =<< takeTMVar v
-	
+
 unregisterOutputThread :: IO ()
 unregisterOutputThread = do
 	let v = outputThreads globalOutputHandle
 	atomically $ putTMVar v . pred =<< takeTMVar v
 
--- Wait to lock output, and once we can, display everything 
+-- Wait to lock output, and once we can, display everything
 -- that's put into the buffers, until the end.
 --
 -- If end is reached before lock is taken, instead add the command's
@@ -406,7 +382,7 @@ bufferWriter ts = do
 			( void $ mapConcurrently displaybuf ts
 			, noop -- buffers already moved to global
 			)
-	worker2 <- async $ void $ globalbuf activitysig worker1
+	worker2 <- async $ void $ globalbuf activitysig
 	void $ async $ do
 		void $ waitCatch worker1
 		void $ waitCatch worker2
@@ -423,7 +399,7 @@ bufferWriter ts = do
 		case change of
 			Right BufSig -> displaybuf v
 			Left AtEnd -> return ()
-	globalbuf activitysig worker1 = do
+	globalbuf activitysig = do
 		ok <- atomically $ do
 			-- signal we're going to handle it
 			-- (returns false if the displaybuf already did)
@@ -438,11 +414,8 @@ bufferWriter ts = do
 			bs <- forM ts $ \(outh, buf, _bufsig, _bufend) ->
 				(outh,) <$> takeMVar buf
 			atomically $
-				forM_ bs $ \(outh, b) -> 
+				forM_ bs $ \(outh, b) ->
 					bufferOutputSTM' outh b
-			-- worker1 might be blocked waiting for the output
-			-- lock, and we've already done its job, so cancel it
-			cancel worker1
 
 -- Adds a value to the OutputBuffer. When adding Output to a Handle,
 -- it's cheaper to combine it with any already buffered Output to that
@@ -500,16 +473,19 @@ bufferOutputSTM' h (OutputBuffer newbuf) = do
 --
 -- This will prevent it from being displayed in the usual way, so you'll
 -- need to use `emitOutputBuffer` to display it yourself.
-outputBufferWaiterSTM :: (OutputBuffer -> (OutputBuffer, OutputBuffer)) -> STM (StdHandle, OutputBuffer)
-outputBufferWaiterSTM selector = waitgetbuf StdOut `orElse` waitgetbuf StdErr
-  where
-	waitgetbuf h = do
+outputBufferWaiterSTM :: (OutputBuffer -> (OutputBuffer, OutputBuffer)) -> STM [(StdHandle, OutputBuffer)]
+outputBufferWaiterSTM selector = do
+	bs <- forM hs $ \h -> do
 		let bv = bufferFor h
 		(selected, rest) <- selector <$> takeTMVar bv
-		when (selected == OutputBuffer [])
-			retry
 		putTMVar bv rest
-		return (h, selected)
+		return selected
+	if all (== OutputBuffer []) bs
+		then retry
+		else do
+			return (zip hs bs)
+  where
+	hs = [StdOut, StdErr]
 
 waitAnyBuffer :: OutputBuffer -> (OutputBuffer, OutputBuffer)
 waitAnyBuffer b = (b, OutputBuffer [])
@@ -518,7 +494,7 @@ waitAnyBuffer b = (b, OutputBuffer [])
 -- output that ends with a newline. Anything buffered without a newline
 -- is left in the buffer.
 waitCompleteLines :: OutputBuffer -> (OutputBuffer, OutputBuffer)
-waitCompleteLines (OutputBuffer l) = 
+waitCompleteLines (OutputBuffer l) =
 	let (selected, rest) = span completeline l
 	in (OutputBuffer selected, OutputBuffer rest)
   where
@@ -533,7 +509,7 @@ endsNewLine t = not (T.null t) && T.last t == '\n'
 -- If you use this, you should use `lockOutput` to ensure you're the only
 -- thread writing to the console.
 emitOutputBuffer :: StdHandle -> OutputBuffer -> IO ()
-emitOutputBuffer stdh (OutputBuffer l) = 
+emitOutputBuffer stdh (OutputBuffer l) =
 	forM_ (reverse l) $ \ba -> case ba of
 		Output t -> emit t
 		InTempFile tmp _ -> do
