@@ -1,7 +1,7 @@
 module Propellor.Property.PropellorRepo where
 
 import Propellor.Base
-import Propellor.Git.Config
+import Propellor.Git
 
 -- | Sets the url to use as the origin of propellor's git repository.
 --
@@ -11,8 +11,8 @@ import Propellor.Git.Config
 --
 -- This property is useful when hosts are being updated without using
 -- --spin, eg when using the `Propellor.Property.Cron.runPropellor` cron job.
-hasOriginUrl :: String -> Property UnixLike
-hasOriginUrl u = property ("propellor repo url " ++ u) $ do
+hasUrl :: String -> Property NoInfo
+hasUrl u = property ("propellor repo url " ++ u) $ do
 	curru <- liftIO getRepoUrl
 	if curru == Just u
 		then return NoChange
