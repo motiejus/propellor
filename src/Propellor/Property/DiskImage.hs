@@ -1,8 +1,6 @@
 -- | Disk image generation.
 --
 -- This module is designed to be imported unqualified.
---
--- TODO avoid starting services while populating chroot and running final
 
 module Propellor.Property.DiskImage (
 	-- * Partition specification
@@ -80,6 +78,11 @@ type DiskImage = FilePath
 -- Note that the disk image file is reused if it already exists,
 -- to avoid expensive IO to generate a new one. And, it's updated in-place,
 -- so its contents are undefined during the build process.
+--
+-- Note that the `Chroot.noServices` property is automatically added to the
+-- chroot while the disk image is being built, which should prevent any
+-- daemons that are included from being started on the system that is
+-- building the disk image.
 imageBuilt :: DiskImage -> (FilePath -> Chroot) -> TableType -> Finalization -> [PartSpec] -> RevertableProperty HasInfo
 imageBuilt = imageBuilt' False
 
@@ -104,26 +107,14 @@ imageBuilt' rebuild img mkchroot tabletype final partspec =
 			return MadeChange
 		| otherwise = doNothing
 	chrootdir = img ++ ".chroot"
-	chroot =
-		let c = propprivdataonly $ mkchroot chrootdir
-		in setContainerProps c $ containerProps c
-			-- Before ensuring any other properties of the chroot,
-			-- avoid starting services. Reverted by imageFinalized.
-			&^ Chroot.noServices
-			-- First stage finalization.
-			& fst final
-			& cachesCleaned
-	-- Only propagate privdata Info from this chroot, nothing else.
-	propprivdataonly (Chroot.Chroot d b ip h) =
-		Chroot.Chroot d b (\c _ -> ip c onlyPrivData) h
-
--- | This property is automatically added to the chroot when building a
--- disk image. It cleans any caches of information that can be omitted;
--- eg the apt cache on Debian.
-cachesCleaned :: Property UnixLike
-cachesCleaned = "cache cleaned" ==> (Apt.cacheCleaned `pickOS` skipit)
-  where
-	skipit = doNothing :: Property UnixLike
+	chroot = mkchroot chrootdir
+		-- Before ensuring any other properties of the chroot, avoid
+		-- starting services. Reverted by imageFinalized.
+		&^ Chroot.noServices
+		-- First stage finalization.
+		& fst final
+		-- Avoid wasting disk image space on the apt cache
+		& Apt.cacheCleaned
 
 -- | Builds a disk image from the contents of a chroot.
 imageBuiltFrom :: DiskImage -> FilePath -> TableType -> Finalization -> [PartSpec] -> RevertableProperty NoInfo
@@ -254,6 +245,7 @@ imageFinalized (_, final) mnts mntopts devs (PartTable _ parts) =
 	go top = do
 		liftIO $ mountall top
 		liftIO $ writefstab top
+		liftIO $ allowservices top
 		ensureProperty $ final top devs
 	
 	-- Ordered lexographically by mount point, so / comes before /usr
@@ -286,6 +278,8 @@ imageFinalized (_, final) mnts mntopts devs (PartTable _ parts) =
 		writeFile fstab $ unlines $ new ++ old
 	-- Eg "UNCONFIGURED FSTAB FOR BASE SYSTEM"
 	unconfigured s = "UNCONFIGURED" `isInfixOf` s
+
+	allowservices top = nukeFile (top ++ "/usr/sbin/policy-rc.d")
 
 noFinalization :: Finalization
 noFinalization = (doNothing, \_ _ -> doNothing)
