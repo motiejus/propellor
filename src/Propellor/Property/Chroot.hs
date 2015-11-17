@@ -8,6 +8,7 @@ module Propellor.Property.Chroot (
 	ChrootBootstrapper(..),
 	Debootstrapped(..),
 	ChrootTarball(..),
+	noServices,
 	inChroot,
 	-- * Internal use
 	provisioned',
@@ -29,6 +30,7 @@ import qualified Propellor.Property.Systemd.Core as Systemd
 import qualified Propellor.Property.File as File
 import qualified Propellor.Shim as Shim
 import Propellor.Property.Mount
+import Utility.FileMode
 
 import qualified Data.Map as M
 import Data.List.Utils
@@ -248,6 +250,22 @@ mungeloc = replace "/" "_"
 
 chrootDesc :: Chroot -> String -> String
 chrootDesc (Chroot loc _ _) desc = "chroot " ++ loc ++ " " ++ desc
+
+-- | Adding this property to a chroot prevents daemons and other services
+-- from being started, which is often something you want to prevent when
+-- building a chroot.
+--
+-- This is accomplished by installing a </usr/sbin/policy-rc.d> script
+-- that does not let any daemons be started by packages that use
+-- invoke-rc.d. Reverting the property removes the script.
+noServices :: RevertableProperty NoInfo
+noServices = setup <!> teardown
+  where
+	f = "/usr/sbin/policy-rc.d"
+	script = [ "#!/bin/sh", "exit 101" ]
+	setup = File.mode f (combineModes (readModes ++ executeModes))
+		`requires` File.hasContent f script
+	teardown = File.notPresent f
 
 -- | Check if propellor is currently running within a chroot.
 --
