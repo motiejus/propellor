@@ -15,22 +15,8 @@ module Propellor.Types (
 	, property''
 	, Desc
 	, RevertableProperty(..)
-	, (<!>)
-	, Propellor(..)
-	, LiftPropellor(..)
-	, Info
-	-- * Types of properties
-	, UnixLike
-	, Linux
-	, DebianLike
-	, Debian
-	, Buntish
-	, ArchLinux
-	, FreeBSD
-	, HasInfo
-	, type (+)
-	, TightenTargets(..)
-	-- * Combining and modifying properties
+	, MkRevertableProperty(..)
+	, IsProp(..)
 	, Combines(..)
 	, CombinedType
 	, Propellor(..)
