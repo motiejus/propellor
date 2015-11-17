@@ -42,10 +42,7 @@ Executable propellor
   Build-Depends: MissingH, directory, filepath, base >= 4.5, base < 5,
    IfElse, process, bytestring, hslogger, unix-compat, ansi-terminal,
    containers (>= 0.5), network, async, time, QuickCheck, mtl, transformers,
-   exceptions (>= 0.6), stm, text
-
-  if (! os(windows))
-    Build-Depends: unix
+   exceptions (>= 0.6), stm, text, unix
 
 Executable propellor-config
   Main-Is: config.hs
@@ -54,10 +51,7 @@ Executable propellor-config
   Build-Depends: MissingH, directory, filepath, base >= 4.5, base < 5,
    IfElse, process, bytestring, hslogger, unix-compat, ansi-terminal,
    containers (>= 0.5), network, async, time, QuickCheck, mtl, transformers,
-   exceptions, stm, text
-
-  if (! os(windows))
-    Build-Depends: unix
+   exceptions (>= 0.6), stm, text, unix
 
 Library
   GHC-Options: -Wall -fno-warn-tabs
@@ -65,10 +59,7 @@ Library
   Build-Depends: MissingH, directory, filepath, base >= 4.5, base < 5,
    IfElse, process, bytestring, hslogger, unix-compat, ansi-terminal,
    containers (>= 0.5), network, async, time, QuickCheck, mtl, transformers,
-   exceptions, stm, text
-
-  if (! os(windows))
-    Build-Depends: unix
+   exceptions (>= 0.6), stm, text, unix
 
   Exposed-Modules:
     Propellor
