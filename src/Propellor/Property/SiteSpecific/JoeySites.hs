@@ -951,11 +951,11 @@ alarmClock oncalendar (User user) command = combineProperties
 		, ""
 		, "[Service]"
 		, "Type=oneshot"
-		, "ExecStart=/bin/systemd-inhibit --what=handle-lid-switch --why=goodmorning /bin/su " ++ user ++ " -c \"" ++ program ++ "\""
+		, "ExecStart=/bin/systemd-inhibit --what=handle-lid-switch --why=goodmorning /bin/su " ++ user ++ " -c \"" ++ command ++ "\""
 		]
 		`onChange` Systemd.daemonReloaded
 	, Systemd.enabled "goodmorning.timer"
 	, Systemd.started "goodmorning.timer"
-	, "/etc/systemd/logind.conf" `File.containsConfPair`
+	, "/etc/systemd/logind.conf" `ConfFile.containsIniSetting`
 		("Login", "LidSwitchIgnoreInhibited", "no")
 	]
