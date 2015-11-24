@@ -122,42 +122,20 @@ bareRepo repo user gitshared = check (isRepo repo) $ propertyList ("git repo: " 
 	isRepo repo' = isNothing <$> catchMaybeIO (readProcess "git" ["rev-parse", "--resolve-git-dir", repo'])
 
 -- | Set a key value pair in a git repo's configuration.
-repoConfigured :: FilePath -> (String, String) -> Property UnixLike
-repo `repoConfigured` (key, value) = check (not <$> alreadyconfigured) $
-	userScriptProperty (User "root")
-		[ "cd " ++ repo
-		, "git config " ++ key ++ " " ++ value
-		]
-		`assume` MadeChange
-		`describe` desc
-  where
-	alreadyconfigured = do
-		vs <- getRepoConfig repo key
-		return $ value `elem` vs
-	desc = "git repo at " ++ repo  ++ " config setting " ++ key ++ " set to " ++ value
-
--- | Gets the value that a key is set to in a git repo's configuration.
-getRepoConfig :: FilePath -> String -> IO [String]
-getRepoConfig repo key = catchDefaultIO [] $
-	lines <$> readProcess "git" ["-C", repo, "config", key]
+repoConfigured :: FilePath -> (String, String) -> Property NoInfo
+repo `repoConfigured` (key, value) =
+	trivial $ userScriptProperty (User "root")
+				[ "cd " ++ repo
+				, "git config " ++ key ++ " " ++ value
+				]
+	`describe` ("git repo at " ++ repo
+		 ++ " config setting " ++ key ++ " set to " ++ value)
 
 -- | Whether a repo accepts non-fast-forward pushes.
-repoAcceptsNonFFs :: FilePath -> RevertableProperty UnixLike UnixLike
+repoAcceptsNonFFs :: FilePath -> RevertableProperty NoInfo
 repoAcceptsNonFFs repo = accepts <!> refuses
-  where
-	accepts = repoConfigured repo ("receive.denyNonFastForwards", "false")
-		`describe` desc "accepts"
-	refuses = repoConfigured repo ("receive.denyNonFastForwards", "true")
-		`describe` desc "rejects"
-	desc s = "git repo " ++ repo ++ " " ++ s ++ " non-fast-forward pushes"
-
--- | Sets a bare repository's default branch, which will be checked out
--- when cloning it.
-bareRepoDefaultBranch :: FilePath -> String -> Property UnixLike
-bareRepoDefaultBranch repo branch =
-	userScriptProperty (User "root")
-		[ "cd " ++ repo
-		, "git symbolic-ref HEAD refs/heads/" ++ branch
-		]
-	`changesFileContent` (repo </> "HEAD")
-	`describe` ("git repo at " ++ repo ++ " has default branch " ++ branch)
+	where
+	  accepts = repoConfigured repo ("receive.denyNonFastForwards", "false")
+				`describe` ("git repo " ++ repo ++ " accepts non-fast-forward pushes")
+	  refuses = repoConfigured repo ("receive.denyNonFastForwards", "true")
+				`describe` ("git repo " ++ repo ++ " refuses non-fast-forward pushes")
