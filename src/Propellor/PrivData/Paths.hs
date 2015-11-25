@@ -6,7 +6,7 @@ import Control.Applicative
 import Prelude
 
 privDataDir :: FilePath
-privDataDir = "privdata"
+privDataDir = "privdata.joey"
 
 privDataFile :: IO FilePath
 privDataFile = allowRelocate $ privDataDir </> "privdata.gpg"
