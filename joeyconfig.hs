@@ -281,10 +281,8 @@ kite = standardSystemUnhardened "kite.kitenet.net" Testing "amd64"
 	& Systemd.persistentJournal
 	& Journald.systemMaxUse "500MiB"
 	& Ssh.passwordAuthentication True
-	& Fail2Ban.installed -- since ssh password authentication is allowed
-	& Apt.serviceInstalledRunning "ntp"
-	& "/etc/timezone" `File.hasContent` ["US/Eastern"]
-
+	-- Since ssh password authentication is allowed:
+	& Fail2Ban.installed
 	& Obnam.backupEncrypted "/" (Cron.Times "33 1 * * *")
 		[ "--repository=sftp://2318@usw-s002.rsync.net/~/kite-root.obnam"
 		, "--client-name=kitenet.net"

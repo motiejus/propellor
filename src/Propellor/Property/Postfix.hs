@@ -277,7 +277,7 @@ service s = (enable <!> disable)
 -- It would be wise to enable fail2ban, for example:
 --
 -- > Fail2Ban.jailEnabled "postfix-sasl"
-saslAuthdInstalled :: Property DebianLike
+saslAuthdInstalled :: Property NoInfo
 saslAuthdInstalled = setupdaemon
 	`requires` Service.running "saslauthd"
 	`requires` postfixgroup
