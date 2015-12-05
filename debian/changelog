@@ -559,9 +559,6 @@ propellor (2.15.0) unstable; urgency=medium
   * Added Propellor.Property.Locale.
     Thanks, Sean Whitton.
   * Added Propellor.Property.Fail2Ban.
-  * Added UncheckedProperty type, along with unchecked to indicate a
-    Property needs its result checked, and checkResult and changesFile
-    to check for changes.
 
  -- Joey Hess <id@joeyh.name>  Sun, 06 Dec 2015 15:33:51 -0400
 

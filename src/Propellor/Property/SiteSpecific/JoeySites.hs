@@ -294,6 +294,7 @@ annexWebSite origin hn uuid remotes = propertyList (hn ++" website using git-ann
 	dir = "/srv/web/" ++ hn
 	postupdatehook = dir </> ".git/hooks/post-update"
 	setup = userScriptProperty (User "joey") setupscript
+		`assume` MadeChange
 	setupscript = 
 		[ "cd " ++ shellEscape dir
 		, "git annex reinit " ++ shellEscape uuid
@@ -405,6 +406,7 @@ twitRss = combineProperties "twitter rss" $ props
 		[ "cd " ++ dir
 		, "ghc --make twitRss" 
 		]
+		`assume` NoChange
 		`requires` Apt.installed
 			[ "libghc-xml-dev"
 			, "libghc-feed-dev"

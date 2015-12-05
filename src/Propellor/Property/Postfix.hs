@@ -60,9 +60,9 @@ mappedFile f setup = setup f
 
 -- | Run newaliases command, which should be done after changing
 -- @/etc/aliases@.
-newaliases :: Property UnixLike
-newaliases = check ("/etc/aliases" `isNewerThan` "/etc/aliases.db")
-	(cmdProperty "newaliases" [])
+newaliases :: Property NoInfo
+newaliases = cmdProperty "newaliases" []
+	`assume` MadeChange
 
 -- | The main config file for postfix.
 mainCfFile :: FilePath
@@ -76,6 +76,7 @@ mainCf (name, value) = check notset set
 	setting = name ++ "=" ++ value
 	notset = (/= Just value) <$> getMainCf name
 	set = cmdProperty "postconf" ["-e", setting]
+		`assume` MadeChange
 
 -- | Gets a main.cf setting.
 getMainCf :: String -> IO (Maybe String)
@@ -297,6 +298,7 @@ saslAuthdInstalled = setupdaemon
 	dirperm = check (not <$> doesDirectoryExist dir) $ 
 		cmdProperty "dpkg-statoverride"
 			[ "--add", "root", "sasl", "710", dir ]
+			`assume` MadeChange
 	postfixgroup = (User "postfix") `User.hasGroup` (Group "sasl")
 		`onChange` restarted
 	dir = "/var/spool/postfix/var/run/saslauthd"

@@ -15,15 +15,13 @@ decruft = propertyList "cloudatcost cleanup" $ props
 	grubbugfix :: Property DebianLike
 	grubbugfix = tightenTargets $ 
 		"/etc/default/grub" `File.containsLine` "GRUB_DISABLE_LINUX_UUID=true"
-			`describe` "worked around grub/lvm boot bug #743126"
-			`onChange` (cmdProperty "update-grub" [] `assume` MadeChange)
-			`onChange` (cmdProperty "update-initramfs" ["-u"] `assume` MadeChange)
-	nukecruft :: Property Linux
-	nukecruft = tightenTargets $
-		combineProperties "nuked cloudatcost cruft" $ props
-			& File.notPresent "/etc/rc.local"
-			& File.notPresent "/etc/init.d/S97-setup.sh"
-			& File.notPresent "/zang-debian.sh"
-			& File.notPresent "/bin/npasswd"
-			& User.nuked (User "user") User.YesReallyDeleteHome
+		`onChange` (cmdProperty "update-grub" [] `assume` MadeChange)
+		`onChange` (cmdProperty "update-initramfs" ["-u"] `assume` MadeChange)
+	, combineProperties "nuked cloudatcost cruft"
+		[ File.notPresent "/etc/rc.local"
+		, File.notPresent "/etc/init.d/S97-setup.sh"
+		, File.notPresent "/zang-debian.sh"
+		, User.nuked (User "user") User.YesReallyDeleteHome
+		]
+	]
 

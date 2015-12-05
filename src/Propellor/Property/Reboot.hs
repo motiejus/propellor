@@ -8,22 +8,8 @@ module Propellor.Property.Reboot (
 
 import Propellor.Base
 
-import Data.List
-import Data.Version
-import Text.ParserCombinators.ReadP
-
--- | Kernel version number, in a string. 
-type KernelVersion = String
-
--- | Using this property causes an immediate reboot.
--- 
--- So, this is not a useful property on its own, but it can be useful to
--- compose with other properties. For example:
---
--- > Apt.installed ["new-kernel"]
--- >	`onChange` Reboot.now
-now :: Property Linux
-now = tightenTargets $ cmdProperty "reboot" []
+now :: Property NoInfo
+now = cmdProperty "reboot" []
 	`assume` MadeChange
 	`describe` "reboot now"
 

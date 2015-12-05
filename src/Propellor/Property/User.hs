@@ -7,51 +7,29 @@ import qualified Propellor.Property.File as File
 
 data Eep = YesReallyDeleteHome
 
-accountFor :: User -> Property DebianLike
-accountFor user@(User u) = tightenTargets $ check nohomedir go
-	`describe` ("account for " ++ u)
-  where
-	nohomedir = isNothing <$> catchMaybeIO (homedir user)
-	go = cmdProperty "adduser"
+accountFor :: User -> Property NoInfo
+accountFor user@(User u) = check nohomedir $
+	cmdProperty "adduser"
 		[ "--disabled-password"
 		, "--gecos", ""
 		, u
 		]
-
-systemAccountFor :: User -> Property DebianLike
-systemAccountFor user@(User u) = systemAccountFor' user Nothing (Just (Group u))
-
-systemAccountFor' :: User -> Maybe FilePath -> Maybe Group -> Property DebianLike
-systemAccountFor' (User u) mhome mgroup = tightenTargets $ check nouser go
-	`describe` ("system account for " ++ u)
+		`assume` MadeChange
+		`describe` ("account for " ++ u)
   where
-	nouser = isNothing <$> catchMaybeIO (getUserEntryForName u)
-	go = cmdProperty "adduser" $
-		[ "--system" ]
-		++
-		"--home" : maybe
-			["/nonexistent", "--no-create-home"]
-			( \h -> [ h ] )
-			mhome
-		++
-		maybe [] ( \(Group g) -> ["--ingroup", g] ) mgroup
-		++
-		[ "--shell", "/usr/bin/nologin"
-		, "--disabled-login"
-		, "--disabled-password"
-		, u
-		]
+	nohomedir = isNothing <$> catchMaybeIO (homedir user)
 
 -- | Removes user home directory!! Use with caution.
-nuked :: User -> Eep -> Property Linux
-nuked user@(User u) _ = tightenTargets $ check hashomedir go
-	`describe` ("nuked user " ++ u)
-  where
-	hashomedir = isJust <$> catchMaybeIO (homedir user)
-	go = cmdProperty "userdel"
+nuked :: User -> Eep -> Property NoInfo
+nuked user@(User u) _ = check hashomedir $
+	cmdProperty "userdel"
 		[ "-r"
 		, u
 		]
+		`assume` MadeChange
+		`describe` ("nuked user " ++ u)
+  where
+	hashomedir = isJust <$> catchMaybeIO (homedir user)
 
 -- | Only ensures that the user has some password set. It may or may
 -- not be a password from the PrivData.
@@ -107,11 +85,13 @@ chpasswd (User user) v ps = makeChange $ withHandle StdinHandle createProcessSuc
 		hClose h
 
 lockedPassword :: User -> Property NoInfo
-lockedPassword user@(User u) = check (not <$> isLockedPassword user) $ cmdProperty "passwd"
-	[ "--lock"
-	, u
-	]
-	`describe` ("locked " ++ u ++ " password")
+lockedPassword user@(User u) = check (not <$> isLockedPassword user) $ 
+	cmdProperty "passwd"
+		[ "--lock"
+		, u
+		]
+		`assume` MadeChange
+		`describe` ("locked " ++ u ++ " password")
 
 data PasswordStatus = NoPassword | LockedPassword | HasPassword
 	deriving (Eq)
@@ -130,9 +110,14 @@ isLockedPassword user = (== LockedPassword) <$> getPasswordStatus user
 homedir :: User -> IO FilePath
 homedir (User user) = homeDirectory <$> getUserEntryForName user
 
-hasGroup :: User -> Group -> Property DebianLike
-hasGroup (User user) (Group group') = tightenTargets $ check test go
-	`describe` unwords ["user", user, "in group", group']
+hasGroup :: User -> Group -> Property NoInfo
+hasGroup (User user) (Group group') = check test $
+	cmdProperty "adduser"
+		[ user
+		, group'
+		]
+		`assume` MadeChange
+		`describe` unwords ["user", user, "in group", group']
   where
 	test = not . elem group' . words <$> readProcess "groups" [user]
 	go = cmdProperty "adduser"
@@ -200,12 +185,14 @@ hasDesktopGroups user@(User u) = property desc $ do
 		]
 
 -- | Controls whether shadow passwords are enabled or not.
-shadowConfig :: Bool -> Property DebianLike
-shadowConfig True = tightenTargets $ check (not <$> shadowExists)
-	(cmdProperty "shadowconfig" ["on"])
+shadowConfig :: Bool -> Property NoInfo
+shadowConfig True = check (not <$> shadowExists) $
+	cmdProperty "shadowconfig" ["on"]
+		`assume` MadeChange
 		`describe` "shadow passwords enabled"
-shadowConfig False = tightenTargets $ check shadowExists
-	(cmdProperty "shadowconfig" ["off"])
+shadowConfig False = check shadowExists $
+	cmdProperty "shadowconfig" ["off"]
+		`assume` MadeChange
 		`describe` "shadow passwords disabled"
 
 shadowExists :: IO Bool
@@ -216,9 +203,10 @@ shadowExists = doesFileExist "/etc/shadow"
 hasLoginShell :: User -> FilePath -> Property DebianLike
 hasLoginShell user loginshell = shellSetTo user loginshell `requires` shellEnabled loginshell
 
-shellSetTo :: User -> FilePath -> Property DebianLike
-shellSetTo (User u) loginshell = tightenTargets $ check needchangeshell
-	(cmdProperty "chsh" ["--shell", loginshell, u])
+shellSetTo :: User -> FilePath -> Property NoInfo
+shellSetTo (User u) loginshell = check needchangeshell $
+	cmdProperty "chsh" ["--shell", loginshell, u]
+		`assume` MadeChange
 		`describe` (u ++ " has login shell " ++ loginshell)
   where
 	needchangeshell = do

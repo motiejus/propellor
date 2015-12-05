@@ -40,6 +40,7 @@ module Propellor.Property (
 	, changesFile
 	, checkResult
 	, Checkable
+	, assume
 ) where
 
 import System.FilePath

@@ -180,7 +180,7 @@ f `isCopyOf` f' = property desc $ go =<< (liftIO $ tryIO $ getFileStatus f')
 		[Param "--preserve=all", Param "--", File src, File dest]
 
 -- | Ensures that a file/dir has the specified owner and group.
-ownerGroup :: FilePath -> User -> Group -> Property UnixLike
+ownerGroup :: FilePath -> User -> Group -> Property NoInfo
 ownerGroup f (User owner) (Group group) = p `describe` (f ++ " owner " ++ og)
   where
 	p = cmdProperty "chown" [og, f]
@@ -188,55 +188,12 @@ ownerGroup f (User owner) (Group group) = p `describe` (f ++ " owner " ++ og)
 	og = owner ++ ":" ++ group
 
 -- | Ensures that a file/dir has the specfied mode.
-mode :: FilePath -> FileMode -> Property UnixLike
+mode :: FilePath -> FileMode -> Property NoInfo
 mode f v = p `changesFile` f
   where
 	p = property (f ++ " mode " ++ show v) $ do
 		liftIO $ modifyFileMode f (const v)
 		return NoChange
-
-class FileContent c where
-	emptyFileContent :: c
-	readFileContent :: FilePath -> IO c
-	writeFileContent :: FileWriteMode -> FilePath -> c -> IO ()
-
-data FileWriteMode = NormalWrite | ProtectedWrite
-
-instance FileContent [Line] where
-	emptyFileContent = []
-	readFileContent f = lines <$> readFile f
-	writeFileContent NormalWrite f ls = writeFile f (unlines ls)
-	writeFileContent ProtectedWrite f ls = writeFileProtected f (unlines ls)
-
-instance FileContent L.ByteString where
-	emptyFileContent = L.empty
-	readFileContent = L.readFile
-	writeFileContent NormalWrite f c = L.writeFile f c
-	writeFileContent ProtectedWrite f c = 
-		writeFileProtected' f (`L.hPutStr` c)
-
--- | A property that applies a pure function to the content of a file.
-fileProperty :: (FileContent c, Eq c) => Desc -> (c -> c) -> FilePath -> Property UnixLike
-fileProperty = fileProperty' NormalWrite
-fileProperty' :: (FileContent c, Eq c) => FileWriteMode -> Desc -> (c -> c) -> FilePath -> Property UnixLike
-fileProperty' writemode desc a f = property desc $ go =<< liftIO (doesFileExist f)
-  where
-	go True = do
-		old <- liftIO $ readFileContent f
-		let new = a old
-		if old == new
-			then noChange
-			else makeChange $ updatefile new `viaStableTmp` f
-	go False = makeChange $ writer f (a emptyFileContent)
-
-	-- Replicate the original file's owner and mode.
-	updatefile content dest = do
-		writer dest content
-		s <- getFileStatus f
-		setFileMode dest (fileMode s)
-		setOwnerAndGroup dest (fileOwner s) (fileGroup s)
-	
-	writer = writeFileContent writemode
 
 -- | A temp file to use when writing new content for a file.
 --

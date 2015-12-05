@@ -5,9 +5,11 @@ import Propellor.Property.User (hasGroup)
 
 type GID = Int
 
-exists :: Group -> Maybe GID -> Property UnixLike
-exists (Group group') mgid = check test (cmdProperty "addgroup" (args mgid))
-	`describe` unwords ["group", group']
+exists :: Group -> Maybe GID -> Property NoInfo
+exists (Group group') mgid = check test $
+	cmdProperty "addgroup" (args mgid)
+		`assume` MadeChange
+		`describe` unwords ["group", group']
   where
 	groupFile = "/etc/group"
 	test = not . elem group' . words <$> readProcess "cut" ["-d:", "-f1", groupFile]

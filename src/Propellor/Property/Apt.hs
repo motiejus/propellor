@@ -187,8 +187,8 @@ setSourcesListD ls basename = f `File.hasContent` ls `onChange` update
   where
 	f = "/etc/apt/sources.list.d/" ++ basename ++ ".list"
 
-runApt :: [String] -> UncheckedProperty DebianLike
-runApt ps = tightenTargets $ cmdPropertyEnv "apt-get" ps noninteractiveEnv
+runApt :: [String] -> UncheckedProperty NoInfo
+runApt ps = cmdPropertyEnv "apt-get" ps noninteractiveEnv
 
 noninteractiveEnv :: [(String, String)]
 noninteractiveEnv =
@@ -196,36 +196,15 @@ noninteractiveEnv =
 		, ("APT_LISTCHANGES_FRONTEND", "none")
 		]
 
--- | Have apt update its lists of packages, but without upgrading anything.
-update :: Property DebianLike
-update = combineProperties ("apt update") $ props
-	& pendingConfigured
-	& runApt ["update"]
-		`assume` MadeChange
+update :: Property NoInfo
+update = runApt ["update"]
+	`assume` MadeChange
+	`describe` "apt update"
 
--- | Have apt upgrade packages, adding new packages and removing old as
--- necessary. Often used in combination with the `update` property.
-upgrade :: Property DebianLike
-upgrade = upgrade' "dist-upgrade"
-
-upgrade' :: String -> Property DebianLike
-upgrade' p = combineProperties ("apt " ++ p) $ props
-	& pendingConfigured
-	& runApt ["-y", p]
-		`assume` MadeChange
-
--- | Have apt upgrade packages, but never add new packages or remove
--- old packages. Not suitable for upgrading acrocess major versions
--- of the distribution.
-safeUpgrade :: Property DebianLike
-safeUpgrade = upgrade' "upgrade"
-
--- | Have dpkg try to configure any packages that are not fully configured.
-pendingConfigured :: Property DebianLike
-pendingConfigured = tightenTargets $
-	cmdPropertyEnv "dpkg" ["--configure", "--pending"] noninteractiveEnv
-		`assume` MadeChange
-		`describe` "dpkg configured pending"
+upgrade :: Property NoInfo
+upgrade = runApt ["-y", "dist-upgrade"]
+	`assume` MadeChange
+	`describe` "apt dist-upgrade"
 
 type Package = String
 
@@ -237,15 +216,17 @@ installed' params ps = robustly $ check (not <$> isInstalled' ps) go
 	`describe` unwords ("apt installed":ps)
   where
 	go = runApt (params ++ ["install"] ++ ps)
+		`assume` MadeChange
 
-installedBackport :: [Package] -> Property Debian
-installedBackport ps = withOS desc $ \w o -> case o of
-	(Just (System (Debian _ suite) _)) -> case backportSuite suite of
-		Nothing -> unsupportedOS'
-		Just bs -> ensureProperty w $
-			runApt (["install", "-t", bs, "-y"] ++ ps)
-				`changesFile` dpkgStatus
-	_ -> unsupportedOS'
+installedBackport :: [Package] -> Property NoInfo
+installedBackport ps = trivial $ withOS desc $ \o -> case o of
+	Nothing -> error "cannot install backports; os not declared"
+	(Just (System (Debian suite) _)) -> case backportSuite suite of
+		Nothing -> notsupported o
+		Just bs -> ensureProperty $ runApt
+			(["install", "-t", bs, "-y"] ++ ps)
+			`assume` MadeChange
+	_ -> notsupported o
   where
 	desc = unwords ("apt installed backport":ps)
 
@@ -253,14 +234,15 @@ installedBackport ps = withOS desc $ \w o -> case o of
 installedMin :: [Package] -> Property DebianLike
 installedMin = installed' ["--no-install-recommends", "-y"]
 
-removed :: [Package] -> Property DebianLike
-removed ps = check (any (== IsInstalled) <$> getInstallStatus ps)
-	(runApt (["-y", "remove"] ++ ps))
-	`describe` unwords ("apt removed":ps)
+removed :: [Package] -> Property NoInfo
+removed ps = check (or <$> isInstalled' ps) go
+	`describe` (unwords $ "apt removed":ps)
+  where
+	go = runApt (["-y", "remove"] ++ ps) `assume` MadeChange
 
 buildDep :: [Package] -> Property NoInfo
-buildDep ps = trivial (robustly go)
-	`changesFile` "/var/lib/dpkg/status"
+buildDep ps = robustly $ go
+	`changesFile` dpkgStatus
 	`describe` (unwords $ "apt build-dep":ps)
   where
 	go = runApt $ ["-y", "build-dep"] ++ ps
@@ -268,56 +250,12 @@ buildDep ps = trivial (robustly go)
 -- | Installs the build deps for the source package unpacked
 -- in the specifed directory, with a dummy package also
 -- installed so that autoRemove won't remove them.
-buildDepIn :: FilePath -> Property DebianLike
+buildDepIn :: FilePath -> Property NoInfo
 buildDepIn dir = cmdPropertyEnv "sh" ["-c", cmd] noninteractiveEnv
 	`changesFile` dpkgStatus
 	`requires` installedMin ["devscripts", "equivs"]
   where
 	cmd = "cd '" ++ dir ++ "' && mk-build-deps debian/control --install --tool 'apt-get -y --no-install-recommends' --remove"
-
--- | The name of a package, a glob to match the names of packages, or a regexp
--- surrounded by slashes to match the names of packages.  See
--- apt_preferences(5), "Regular expressions and glob(7) syntax"
-type AptPackagePref = String
-
--- | Pins a list of packages, package wildcards and/or regular expressions to a
--- list of suites and corresponding pin priorities (see apt_preferences(5)).
--- Revert to unpin.
---
--- Each package, package wildcard or regular expression will be pinned to all of
--- the specified suites.
---
--- Note that this will have no effect unless there is an apt source for each of
--- the suites.  One way to add an apt source is 'Apt.suiteAvailablePinned'.
---
--- For example, to obtain Emacs Lisp addon packages not present in your release
--- of Debian from testing, falling back to sid if they're not available in
--- testing, you could use
---
---  > & Apt.suiteAvailablePinned Testing (-10)
---  > & Apt.suiteAvailablePinned Unstable (-10)
---  > & ["elpa-*"] `Apt.pinnedTo` [(Testing, 100), (Unstable, 50)]
-pinnedTo
-	:: [AptPackagePref]
-	-> [(DebianSuite, PinPriority)]
-	-> RevertableProperty Debian Debian
-pinnedTo ps pins = mconcat (map (\p -> pinnedTo' p pins) ps)
-	`describe` unwords (("pinned to " ++ showSuites):ps)
-  where
-	showSuites = intercalate "," $ showSuite . fst <$> pins
-
-pinnedTo'
-	:: AptPackagePref
-	-> [(DebianSuite, PinPriority)]
-	-> RevertableProperty Debian Debian
-pinnedTo' p pins =
-	(tightenTargets $ prefFile `File.hasContent` prefs)
-	<!> (tightenTargets $ File.notPresent prefFile)
-  where
-	prefs = foldr step [] pins
-	step (suite, pin) ls = ls ++ suitePinBlock p suite pin ++ [""]
-	prefFile = "/etc/apt/preferences.d/10propellor_"
-		++ File.configFileName p <.> "pref"
 
 -- | Package installation may fail becuse the archive has changed.
 -- Run an update in that case and retry.
@@ -458,38 +396,19 @@ aptKeyFile k = "/etc/apt/trusted.gpg.d" </> keyname k ++ ".gpg"
 
 -- | Cleans apt's cache of downloaded packages to avoid using up disk
 -- space.
-cacheCleaned :: Property DebianLike
-cacheCleaned = tightenTargets $ cmdProperty "apt-get" ["clean"]
-	`assume` NoChange
+cacheCleaned :: Property NoInfo
+cacheCleaned = cmdProperty "apt-get" ["clean"]
+	`assume` MadeChange
 	`describe` "apt cache cleaned"
 
 -- | Add a foreign architecture to dpkg and apt.
-hasForeignArch :: String -> Property DebianLike
+hasForeignArch :: String -> Property NoInfo
 hasForeignArch arch = check notAdded (add `before` update)
 	`describe` ("dpkg has foreign architecture " ++ arch)
   where
-	notAdded = (notElem arch . lines) <$> readProcess "dpkg" ["--print-foreign-architectures"]
+	notAdded = (not . elem arch . lines) <$> readProcess "dpkg" ["--print-foreign-architectures"]
 	add = cmdProperty "dpkg" ["--add-architecture", arch]
 		`assume` MadeChange
-
--- | Disable the use of PDiffs for machines with high-bandwidth connections.
-noPDiffs :: Property DebianLike
-noPDiffs = tightenTargets $ "/etc/apt/apt.conf.d/20pdiffs" `File.hasContent`
-	[ "Acquire::PDiffs \"false\";" ]
-
-suitePin :: DebianSuite -> String
-suitePin s = prefix s ++ showSuite s
-  where
-	prefix (Stable _) = "n="
-	prefix _ = "a="
-
-suitePinBlock :: AptPackagePref -> DebianSuite -> PinPriority -> [Line]
-suitePinBlock p suite pin =
-	[ "Explanation: This file added by propellor"
-	, "Package: " ++ p
-	, "Pin: release " ++ suitePin suite
-	, "Pin-Priority: " ++ val pin
-	]
 
 dpkgStatus :: FilePath
 dpkgStatus = "/var/lib/dpkg/status"

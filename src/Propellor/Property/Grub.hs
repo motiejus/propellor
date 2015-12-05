@@ -27,6 +27,7 @@ installed bios = installed' bios `before` mkConfig
 --   -- installed.
 mkConfig :: Property NoInfo
 mkConfig = cmdProperty "update-grub" []
+	`assume` MadeChange
 
 -- | Installs grub; does not run update-grub.
 installed' :: BIOS -> Property NoInfo
@@ -50,8 +51,8 @@ installed' bios = Apt.installed [pkg] `describe` "grub package installed"
 -- on the device; it always does the work to reinstall it. It's a good idea
 -- to arrange for this property to only run once, by eg making it be run
 -- onChange after OS.cleanInstallOnce.
-boots :: OSDevice -> Property Linux
-boots dev = tightenTargets $ cmdProperty "grub-install" [dev]
+boots :: OSDevice -> Property NoInfo
+boots dev = cmdProperty "grub-install" [dev]
 	`assume` MadeChange
 	`describe` ("grub boots " ++ dev)
 
@@ -77,8 +78,11 @@ chainPVGrub rootdev bootdev timeout = combineProperties desc $ props
 		]
 	& "/boot/load.cf" `File.hasContent`
 		[ "configfile (" ++ bootdev ++ ")/boot/grub/grub.cfg" ]
-	& installed Xen
-	& flip flagFile "/boot/xen-shim" xenshim
+	, installed Xen
+	, flip flagFile "/boot/xen-shim" $ scriptProperty ["grub-mkimage --prefix '(" ++ bootdev ++ ")/boot/grub' -c /boot/load.cf -O x86_64-xen /usr/lib/grub/x86_64-xen/*.mod > /boot/xen-shim"]
+		`assume` MadeChange
+		`describe` "/boot-xen-shim"
+	]
   where
 	desc = "chain PV-grub"
 	xenshim = scriptProperty ["grub-mkimage --prefix '(" ++ bootdev ++ ")/boot/grub' -c /boot/load.cf -O x86_64-xen /usr/lib/grub/x86_64-xen/*.mod > /boot/xen-shim"]

@@ -38,14 +38,20 @@ siteEnabled hn cf = enable <!> disable
 		[ siteAvailable hn cf
 			`requires` installed
 			`onChange` reloaded
-  where
-	isenabled = boolSystem "a2query" [Param "-q", Param "-s", Param domain]
+		, check (not <$> isenabled) $
+			cmdProperty "a2ensite" ["--quiet", hn]
+				`assume` MadeChange
+				`requires` installed
+				`onChange` reloaded
+		]
+	disable = siteDisabled hn
+	isenabled = boolSystem "a2query" [Param "-q", Param "-s", Param hn]
 
-siteDisabled :: Domain -> Property DebianLike
-siteDisabled domain = combineProperties
-	("apache site disabled " ++ domain)
-	(toProps $ map File.notPresent (siteCfg domain))
-		`onChange` (cmdProperty "a2dissite" ["--quiet", domain] `assume` MadeChange)
+siteDisabled :: HostName -> Property NoInfo
+siteDisabled hn = combineProperties
+	("apache site disabled " ++ hn) 
+	(map File.notPresent (siteCfg hn))
+		`onChange` (cmdProperty "a2dissite" ["--quiet", hn] `assume` MadeChange)
 		`requires` installed
 		`onChange` reloaded
 
@@ -59,13 +65,15 @@ siteAvailable domain cf = combineProperties ("apache site available " ++ domain)
 modEnabled :: String -> RevertableProperty NoInfo
 modEnabled modname = enable <!> disable
   where
-	enable = check (not <$> isenabled)
-		(cmdProperty "a2enmod" ["--quiet", modname])
+	enable = check (not <$> isenabled) $
+		cmdProperty "a2enmod" ["--quiet", modname]
+			`assume` MadeChange
 			`describe` ("apache module enabled " ++ modname)
 			`requires` installed
 			`onChange` reloaded
-	disable = check isenabled
-		(cmdProperty "a2dismod" ["--quiet", modname])
+	disable = check isenabled $ 
+		cmdProperty "a2dismod" ["--quiet", modname]
+			`assume` MadeChange
 			`describe` ("apache module disabled " ++ modname)
 			`requires` installed
 			`onChange` reloaded

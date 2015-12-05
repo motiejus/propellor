@@ -165,10 +165,8 @@ imageBuilt :: HasImage c => FilePath -> c -> Property Linux
 imageBuilt directory ctr = built `describe` msg
   where
 	msg = "docker image " ++ (imageIdentifier image) ++ " built from " ++ directory
-	built :: Property Linux
-	built = tightenTargets $
-		Cmd.cmdProperty' dockercmd ["build", "--tag", imageIdentifier image, "./"] workDir
-			`assume` MadeChange
+	built = Cmd.cmdProperty' dockercmd ["build", "--tag", imageIdentifier image, "./"] workDir
+		`assume` MadeChange
 	workDir p = p { cwd = Just directory }
 	image = getImageName ctr
 
@@ -177,10 +175,8 @@ imagePulled :: HasImage c => c -> Property Linux
 imagePulled ctr = pulled `describe` msg
   where
 	msg = "docker image " ++ (imageIdentifier image) ++ " pulled"
-	pulled :: Property Linux
-	pulled = tightenTargets $ 
-		Cmd.cmdProperty dockercmd ["pull", imageIdentifier image]
-			`assume` MadeChange
+	pulled = Cmd.cmdProperty dockercmd ["pull", imageIdentifier image]
+		`assume` MadeChange
 	image = getImageName ctr
 
 propagateContainerInfo :: (IsProp (Property i)) => Container -> Property i -> Property HasInfo
@@ -231,8 +227,8 @@ garbageCollected = propertyList "docker garbage collected" $ props
 -- Currently, this consists of making pam_loginuid lines optional in
 -- the pam config, to work around <https://github.com/docker/docker/issues/5663>
 -- which affects docker 1.2.0.
-tweaked :: Property Linux
-tweaked = tightenTargets $ cmdProperty "sh"
+tweaked :: Property NoInfo
+tweaked = cmdProperty "sh"
 	[ "-c"
 	, "sed -ri 's/^session\\s+required\\s+pam_loginuid.so$/session optional pam_loginuid.so/' /etc/pam.d/*"
 	]
@@ -245,11 +241,10 @@ tweaked = tightenTargets $ cmdProperty "sh"
 -- other GRUB_CMDLINE_LINUX_DEFAULT settings.
 --
 -- Only takes effect after reboot. (Not automated.)
-memoryLimited :: Property DebianLike
-memoryLimited = tightenTargets $
-	"/etc/default/grub" `File.containsLine` cfg
-		`describe` "docker memory limited"
-		`onChange` (cmdProperty "update-grub" [] `assume` MadeChange)
+memoryLimited :: Property NoInfo
+memoryLimited = "/etc/default/grub" `File.containsLine` cfg
+	`describe` "docker memory limited" 
+	`onChange` (cmdProperty "update-grub" [] `assume` MadeChange)
   where
 	cmdline = "cgroup_enable=memory swapaccount=1"
 	cfg = "GRUB_CMDLINE_LINUX_DEFAULT=\""++cmdline++"\""

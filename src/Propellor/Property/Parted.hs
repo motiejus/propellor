@@ -194,7 +194,7 @@ partitioned eep disk (PartTable tabletype parts) = property' desc $ \w -> do
 --
 -- Parted is run in script mode, so it will never prompt for input.
 -- It is asked to use cylinder alignment for the disk.
-parted :: Eep -> FilePath -> [String] -> Property (DebianLike + ArchLinux)
+parted :: Eep -> FilePath -> [String] -> Property NoInfo
 parted YesReallyDeleteDiskContents disk ps = p `requires` installed
   where
 	p = cmdProperty "parted" ("--script":"--align":"cylinder":disk:ps)

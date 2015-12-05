@@ -25,7 +25,7 @@ formatted = formatted' []
 -- Eg, ["-m0"]
 type MkfsOpts = [String]
 
-formatted' :: MkfsOpts -> Eep -> Fs -> FilePath -> Property DebianLike
+formatted' :: MkfsOpts -> Eep -> Fs -> FilePath -> Property NoInfo
 formatted' opts YesReallyFormatPartition fs dev = cmdProperty cmd opts'
 	`assume` MadeChange
 	`requires` Apt.installed [pkg]
