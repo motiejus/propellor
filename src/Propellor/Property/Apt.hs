@@ -258,10 +258,10 @@ removed ps = check (any (== IsInstalled) <$> getInstallStatus ps)
 	(runApt (["-y", "remove"] ++ ps))
 	`describe` unwords ("apt removed":ps)
 
-buildDep :: [Package] -> Property DebianLike
-buildDep ps = robustly $ go
-	`changesFile` dpkgStatus
-	`describe` unwords ("apt build-dep":ps)
+buildDep :: [Package] -> Property NoInfo
+buildDep ps = trivial (robustly go)
+	`changesFile` "/var/lib/dpkg/status"
+	`describe` (unwords $ "apt build-dep":ps)
   where
 	go = runApt $ ["-y", "build-dep"] ++ ps
 

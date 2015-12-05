@@ -170,8 +170,7 @@ Library
     Propellor.Types.PrivData
     Propellor.Types.Result
     Propellor.Types.ResultCheck
-    Propellor.Types.Singletons
-    Propellor.Types.ZFS
+    Propellor.Types.CmdLine
   Other-Modules:
     Propellor.Bootstrap
     Propellor.Git
