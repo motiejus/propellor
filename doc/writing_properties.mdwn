@@ -56,7 +56,7 @@ it runs, even when it didn't really do much. Now, there's an easy way to
 avoid that problem, we could just tell propellor to assume that chsh
 has not made a change:
 	
-	shellSetTo :: UserName -> FilePath -> Property UnixLike
+	shellSetTo :: UserName -> FilePath -> Property
 	shellSetTo user shell = cmdProperty "chsh" ["--shell", shell, user]
 		`assume` NoChange
 
