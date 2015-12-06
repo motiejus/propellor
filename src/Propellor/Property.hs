@@ -37,6 +37,7 @@ module Propellor.Property (
 	, UncheckedProperty
 	, unchecked
 	, changesFile
+	, changesFileContent
 	, checkResult
 	, Checkable
 	, assume
@@ -44,10 +45,12 @@ module Propellor.Property (
 
 import System.FilePath
 import Control.Monad
+import Control.Applicative
 import Data.Monoid
 import Control.Monad.IfElse
 import "mtl" Control.Monad.RWS.Strict
 import System.Posix.Files
+import qualified Data.Hash.MD5 as MD5
 
 import Propellor.Types
 import Propellor.Types.ResultCheck
@@ -56,7 +59,11 @@ import Propellor.Exception
 import Utility.Exception
 import Utility.Monad
 import Utility.Misc
-import Utility.Directory
+
+-- | Constructs a Property, from a description and an action to run to
+-- ensure the Property is met.
+property :: Desc -> Propellor Result -> Property NoInfo
+property d s = simpleProperty d s mempty
 
 -- | Makes a perhaps non-idempotent Property be idempotent by using a flag
 -- file to indicate whether it has run before.
@@ -342,11 +349,12 @@ fallback = combineWith combiner revertcombiner
 	revertcombiner = (<>)
 
 -- | Indicates that a Property may change a particular file. When the file
--- is modified, the property will return MadeChange instead of NoChange.
+-- is modified in any way (including changing its permissions or mtime),
+-- the property will return MadeChange instead of NoChange.
 changesFile :: Checkable p i => p i -> FilePath -> Property i
 changesFile p f = checkResult getstat comparestat p
   where
-	getstat = liftIO $ catchMaybeIO $ getSymbolicLinkStatus f
+	getstat = catchMaybeIO $ getSymbolicLinkStatus f
 	comparestat oldstat = do
 		newstat <- getstat
 		return $ if samestat oldstat newstat then NoChange else MadeChange
@@ -370,6 +378,17 @@ changesFile p f = checkResult getstat comparestat p
 		, isSocket a == isSocket b
 		]
 	samestat _ _ = False
+
+-- | Like `changesFile`, but compares the content of the file.
+-- Changes to mtime etc that do not change file content are treated as
+-- NoChange.
+changesFileContent :: Checkable p i => p i -> FilePath -> Property i
+changesFileContent p f = checkResult getmd5 comparemd5 p
+  where
+	getmd5 = catchMaybeIO $ MD5.md5 . MD5.Str <$> readFileStrictAnyEncoding f
+	comparemd5 oldmd5 = do
+		newmd5 <- getmd5
+		return $ if oldmd5 == newmd5 then NoChange else MadeChange
 
 -- | Makes a property that is satisfied differently depending on the host's
 -- operating system. 
