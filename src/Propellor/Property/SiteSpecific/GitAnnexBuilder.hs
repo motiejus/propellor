@@ -68,7 +68,6 @@ tree buildarch flavor = combineProperties "gitannexbuilder tree" $ props
 	builddircloned = check (not <$> doesDirectoryExist builddir) $ userScriptProperty (User builduser)
 		[ "git clone git://git-annex.branchable.com/ " ++ builddir
 		]
-		`assume` MadeChange
 
 buildDepsApt :: Property DebianLike
 buildDepsApt = combineProperties "gitannexbuilder build deps" $ props
