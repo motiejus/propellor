@@ -6,10 +6,11 @@
 --
 -- The best approach is to `check` a property, so that the command is only
 -- run when it needs to be. With this method, you avoid running the
--- `cmdProperty` unnecessarily.
+-- `cmdProperty` unnecessarily, and you know that whenever it runs, a
+-- change was made.
 --
 -- > check (not <$> userExists "bob")
--- > 	(cmdProperty "useradd" ["bob"])
+-- > 	(cmdProperty "useradd" ["bob"] `assume` MadeChange)
 --
 -- Sometimes it's just as expensive to check a property as it would be to
 -- run the command that ensures the property. So you can let the command
@@ -59,11 +60,6 @@ import Utility.Process (createProcess, CreateProcess, waitForProcess)
 -- | A property that can be satisfied by running a command.
 --
 -- The command must exit 0 on success.
---
--- This and other properties in this module are `UncheckedProperty`,
--- and return `NoChange`. It's up to the user to check if the command
--- made a change to the system, perhaps by using `checkResult` or
--- `changesFile`, or you can use @cmdProperty "foo" ["bar"] `assume` MadeChange@
 cmdProperty :: String -> [String] -> UncheckedProperty NoInfo
 cmdProperty cmd params = cmdProperty' cmd params id
 
