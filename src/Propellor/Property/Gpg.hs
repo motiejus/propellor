@@ -21,22 +21,18 @@ data GpgKeyType = GpgPubKey | GpgPrivKey
 --
 -- Recommend only using this for low-value dedicated role keys.
 -- No attempt has been made to scrub the key out of memory once it's used.
-keyImported :: GpgKeyId -> User -> Property (HasInfo + DebianLike)
-keyImported key@(GpgKeyId keyid) user@(User u) = prop
+keyImported :: GpgKeyId -> User -> Property HasInfo
+keyImported key@(GpgKeyId keyid) user@(User u) = check (not <$> hasPubKey key user) prop
 	`requires` installed
   where
 	desc = u ++ " has gpg key " ++ show keyid
-	prop :: Property (HasInfo + DebianLike)
 	prop = withPrivData src (Context keyid) $ \getkey ->
-		property desc $ getkey $ \key' -> do
-			let keylines = privDataLines key'
-			ifM (liftIO $ hasGpgKey (parse keylines))
-				( return NoChange
-				, makeChange $ withHandle StdinHandle createProcessSuccess
-					(proc "su" ["-c", "gpg --import", u]) $ \h -> do
-						hPutStr h (unlines keylines)
-						hClose h
-				)
+		property desc $ getkey $ \key' -> makeChange $
+			withHandle StdinHandle createProcessSuccess
+				(proc "su" ["-c", "gpg --import", u]) $ \h -> do
+					fileEncoding h
+					hPutStr h (unlines (privDataLines key'))
+					hClose h
 	src = PrivDataSource GpgKey "Either a gpg public key, exported with gpg --export -a, or a gpg private key, exported with gpg --export-secret-key -a"
 
 	parse ("-----BEGIN PGP PUBLIC KEY BLOCK-----":_) = Just GpgPubKey
