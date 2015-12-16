@@ -22,17 +22,21 @@ data GpgKeyType = GpgPubKey | GpgPrivKey
 -- Recommend only using this for low-value dedicated role keys.
 -- No attempt has been made to scrub the key out of memory once it's used.
 keyImported :: GpgKeyId -> User -> Property HasInfo
-keyImported key@(GpgKeyId keyid) user@(User u) = check (not <$> hasPubKey key user) prop
+keyImported key@(GpgKeyId keyid) user@(User u) = prop
 	`requires` installed
   where
 	desc = u ++ " has gpg key " ++ show keyid
 	prop = withPrivData src (Context keyid) $ \getkey ->
-		property desc $ getkey $ \key' -> makeChange $
-			withHandle StdinHandle createProcessSuccess
-				(proc "su" ["-c", "gpg --import", u]) $ \h -> do
-					fileEncoding h
-					hPutStr h (unlines (privDataLines key'))
-					hClose h
+		property desc $ getkey $ \key' -> do
+			let keylines = privDataLines key'
+			ifM (liftIO $ hasGpgKey (parse keylines))
+				(return NoChange
+				, makeChange $ withHandle StdinHandle createProcessSuccess
+					(proc "su" ["-c", "gpg --import", u]) $ \h -> do
+						fileEncoding h
+						hPutStr h (unlines keylines)
+						hClose h
+				)
 	src = PrivDataSource GpgKey "Either a gpg public key, exported with gpg --export -a, or a gpg private key, exported with gpg --export-secret-key -a"
 
 	parse ("-----BEGIN PGP PUBLIC KEY BLOCK-----":_) = Just GpgPubKey
@@ -42,14 +46,6 @@ keyImported key@(GpgKeyId keyid) user@(User u) = check (not <$> hasPubKey key us
 	hasGpgKey Nothing = error $ "Failed to run gpg parser on armored key " ++ keyid
 	hasGpgKey (Just GpgPubKey) = hasPubKey key user
 	hasGpgKey (Just GpgPrivKey) = hasPrivKey key user
-
-hasPrivKey :: GpgKeyId -> User -> IO Bool
-hasPrivKey (GpgKeyId keyid) (User u) = catchBoolIO $
-	snd <$> processTranscript "su" ["-c", "gpg --list-secret-keys " ++ shellEscape keyid, u] Nothing
-
-hasPubKey :: GpgKeyId -> User -> IO Bool
-hasPubKey (GpgKeyId keyid) (User u) = catchBoolIO $
-	snd <$> processTranscript "su" ["-c", "gpg --list-public-keys " ++ shellEscape keyid, u] Nothing
 
 dotDir :: User -> IO FilePath
 dotDir (User u) = do
