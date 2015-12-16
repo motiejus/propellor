@@ -8,7 +8,6 @@ import Utility.FileMode
 import qualified Data.ByteString.Lazy as L
 import Data.List (isInfixOf, isPrefixOf)
 import System.Posix.Files
-import System.PosixCompat.Types
 import System.Exit
 
 type Line = String
