@@ -527,6 +527,9 @@ propellor (2.15.1) unstable; urgency=medium
     Thanks, Félix Sipma.
   * Clean build with ghc 7.10.
   * Merged Utility changes from git-annex.
+  * Gpg.keyImported converted to not use a flag file and instead check
+    if gpg has the provided key already.
+    Thanks, Félix Sipma.
 
  -- Joey Hess <id@joeyh.name>  Sat, 19 Dec 2015 16:43:09 -0400
 
