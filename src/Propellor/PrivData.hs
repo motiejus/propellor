@@ -37,6 +37,9 @@ import qualified Data.Set as S
 import qualified Data.ByteString.Lazy as L
 import System.Console.Concurrent
 import System.Console.Concurrent.Internal (ConcurrentProcessHandle(..))
+import Control.Applicative
+import Data.Monoid
+import Prelude
 
 import Propellor.Types
 import Propellor.Types.PrivData

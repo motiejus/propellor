@@ -22,13 +22,33 @@ import Utility.Process
 import Utility.Process.NonConcurrent
 import Utility.FileSystemEncoding
 
+import Control.Monad
+import Control.Monad.IfElse
+import System.Directory
+import System.FilePath
 import System.Environment (getArgs)
 import System.Exit
-import System.Posix
-import Data.List
-import Control.Monad.IfElse
+import System.Posix.Directory
+import System.IO
 import Control.Applicative
 import Prelude
+
+distdir :: FilePath
+distdir = "/usr/src/propellor"
+
+distrepo :: FilePath
+distrepo = distdir </> "propellor.git"
+
+disthead :: FilePath
+disthead = distdir </> "head"
+
+upstreambranch :: String
+upstreambranch = "upstream/master"
+
+-- Using the github mirror of the main propellor repo because
+-- it is accessible over https for better security.
+netrepo :: String
+netrepo = "https://github.com/joeyh/propellor.git"
 
 main :: IO ()
 main = withConcurrentOutput $ do

@@ -6,6 +6,7 @@ import Utility.Exception
 import Utility.Env
 import Utility.Directory
 
+import System.Directory
 import Control.Applicative
 import Prelude
 

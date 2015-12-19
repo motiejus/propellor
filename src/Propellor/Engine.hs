@@ -13,11 +13,11 @@ module Propellor.Engine (
 import System.Exit
 import System.IO
 import Data.Monoid
-import Control.Applicative
 import "mtl" Control.Monad.RWS.Strict
 import System.PosixCompat
 import System.Posix.IO
 import System.FilePath
+import System.Directory
 import Control.Applicative
 import Prelude
 
