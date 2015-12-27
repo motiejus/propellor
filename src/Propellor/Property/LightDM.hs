@@ -6,7 +6,7 @@ import Propellor.Base
 import qualified Propellor.Property.Apt as Apt
 import qualified Propellor.Property.ConfFile as ConfFile
 
-installed :: Property DebianLike
+installed :: Property NoInfo
 installed = Apt.installed ["lightdm"]
 
 -- | Configures LightDM to skip the login screen and autologin as a user.
