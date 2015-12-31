@@ -2,6 +2,7 @@ propellor (4.0.4) UNRELEASED; urgency=medium
 
   * Propellor.Property.Restic added for yet another backup program.
     Thanks, Félix Sipma.
+  * Bootstrap apt-get installs run with deconf noninteractive frontend.
 
  -- Joey Hess <id@joeyh.name>  Thu, 27 Apr 2017 16:31:26 -0400
 

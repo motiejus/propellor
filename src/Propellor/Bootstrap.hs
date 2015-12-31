@@ -73,9 +73,7 @@ depsCommand msys = "( " ++ intercalate " ; " (concat [osinstall, cabalinstall]) 
 		, "cabal install --only-dependencies"
 		]
 
-	aptinstall p = "DEBIAN_FRONTEND=noninteractive apt-get -qq --no-upgrade --no-install-recommends -y install " ++ p
-	pkginstall p = "ASSUME_ALWAYS_YES=yes pkg install " ++ p
-	pacmaninstall p = "pacman -S --noconfirm --needed " ++ p
+	aptinstall p = "DEBIAN_FRONTEND=noninteractive apt-get --no-upgrade --no-install-recommends -y install " ++ p
 
 	-- This is the same deps listed in debian/control.
 	debdeps =
@@ -97,24 +95,8 @@ depsCommand msys = "( " ++ intercalate " ; " (concat [osinstall, cabalinstall]) 
 		, "make"
 		]
 
-installGitCommand :: Maybe System -> ShellCommand
-installGitCommand msys = case msys of
-	(Just (System (Debian _ _) _)) -> use apt
-	(Just (System (Buntish _) _)) -> use apt
-	(Just (System (FreeBSD _) _)) -> use
-		[ "ASSUME_ALWAYS_YES=yes pkg update"
-		, "ASSUME_ALWAYS_YES=yes pkg install git"
-		]
-	(Just (System (ArchLinux) _)) -> use
-		[ "pacman -S --noconfirm --needed git"]
-	-- assume a debian derived system when not specified
-	Nothing -> use apt
-  where
-	use cmds = "if ! git --version >/dev/null 2>&1; then " ++ intercalate " && " cmds ++ "; fi"
-	apt =
-		[ "apt-get update"
-		, "DEBIAN_FRONTEND=noninteractive apt-get -qq --no-install-recommends --no-upgrade -y install git"
-		]
+installGitCommand :: ShellCommand
+installGitCommand = "if ! git --version >/dev/null; then apt-get update && DEBIAN_FRONTEND=noninteractive apt-get --no-install-recommends --no-upgrade -y install git; fi"
 
 buildPropellor :: Maybe Host -> IO ()
 buildPropellor mh = unlessM (actionMessage "Propellor build" (build msys)) $
