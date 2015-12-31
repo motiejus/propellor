@@ -49,7 +49,6 @@ hosts =                 --                  (o)  `
 	[ darkstar
 	, gnu
 	, clam
-	, mayfly
 	, oyster
 	, orca
 	, baleen
@@ -125,7 +124,6 @@ clam = host "clam.kitenet.net" $ props
 	& Apt.unattendedUpgrades
 	& Network.ipv6to4
 	& Systemd.persistentJournal
-	& Journald.systemMaxUse "50MiB"
 
 	& Tor.isRelay
 	& Tor.named "kite1"
@@ -137,27 +135,10 @@ clam = host "clam.kitenet.net" $ props
 	& alias "scroll.joeyh.name"
 	& alias "us.scroll.joeyh.name"
 
-mayfly :: Host
-mayfly = host "mayfly.kitenet.net" $ props
-	& standardSystem (Stable "jessie") X86_64
-		[ "Scratch VM. Contents can change at any time!" ]
-	& ipv4 "167.88.36.193"
-
-	& CloudAtCost.decruft
-	& Apt.unattendedUpgrades
-	& Network.ipv6to4
-	& Systemd.persistentJournal
-	& Journald.systemMaxUse "500MiB"
-
-	& Tor.isRelay
-	& Tor.named "kite3"
-	& Tor.bandwidthRate (Tor.PerMonth "400 GB")
-
 oyster :: Host
-oyster = host "oyster.kitenet.net" $ props
-	& standardSystem Unstable X86_64
-		[ "Unreliable server. Anything here may be lost at any time!" ]
-	& ipv4 "64.137.179.21"
+oyster = standardSystem "oyster.kitenet.net" Unstable "amd64"
+	[ "Unreliable server. Anything here may be lost at any time!" ]
+	& ipv4 "104.167.117.109"
 
 	& CloudAtCost.decruft
 	& Ssh.hostKeys hostContext
@@ -166,33 +147,15 @@ oyster = host "oyster.kitenet.net" $ props
 	& Apt.unattendedUpgrades
 	& Network.ipv6to4
 	& Systemd.persistentJournal
-	& Journald.systemMaxUse "500MiB"
-	& Apt.serviceInstalledRunning "swapspace"
 
 	& Tor.isRelay
-	& Tor.named "kite4"
+	& Tor.named "kite2"
 	& Tor.bandwidthRate (Tor.PerMonth "400 GB")
-
-	-- Nothing is using http port 80, so listen on
-	-- that port for ssh, for traveling on bad networks that
-	-- block 22.
-	& Ssh.listenPort (Port 80)
-
-baleen :: Host
-baleen = host "baleen.kitenet.net" $ props
-	& standardSystem Unstable X86_64 [ "New git-annex build box." ]
-
-	-- Not on public network; ssh access via bounce host.
-	& ipv4 "138.38.77.40"
 	
-	-- The root filesystem content may be lost if the VM is resized.
-	-- /dev/vdb contains persistent storage.
-	& Fstab.mounted "auto" "/dev/vdb" "/var/lib/container" mempty
-	
-	& Apt.unattendedUpgrades
-	& Postfix.satellite
-	& Apt.serviceInstalledRunning "ntp"
-	& Systemd.persistentJournal
+	-- ssh on some extra ports to deal with horrible networks
+	-- while travelling
+	& alias "travelling.kitenet.net"
+	& Ssh.listenPort 80
 
 orca :: Host
 orca = host "orca.kitenet.net" $ props
