@@ -689,7 +689,7 @@ kiteMailServer = propertyList "kitenet.net mail server" $ props
 	dovecotusers = "/etc/dovecot/users"
 
 	ssmtp = Postfix.Service 
-		(Postfix.InetService (Nothing, "ssmtp"))
+		(Postfix.InetService Nothing "ssmtp")
 		"smtpd" Postfix.defServiceOpts
 
 -- Configures postfix to relay outgoing mail to kitenet.net, with
