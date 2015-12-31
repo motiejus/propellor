@@ -4,6 +4,7 @@ propellor (4.0.4) UNRELEASED; urgency=medium
     Thanks, Félix Sipma.
   * Bootstrap apt-get installs run with deconf noninteractive frontend.
   * spin --via: Avoid committing on relay host.
+  * Postfix: Add service property to enable/disable services in master.cf.
 
  -- Joey Hess <id@joeyh.name>  Thu, 27 Apr 2017 16:31:26 -0400
 

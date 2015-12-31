@@ -681,21 +681,33 @@ kiteMailServer = propertyList "kitenet.net mail server" $ props
 		`describe` "pine configured to use local imap server"
 	
 	& Apt.serviceInstalledRunning "mailman"
-	-- Override the default http url. (Only affects new lists.)
-	& "/etc/mailman/mm_cfg.py" `File.containsLine`
-		"DEFAULT_URL_PATTERN = 'https://%s/cgi-bin/mailman/'"
 
 	& Postfix.service ssmtp
-
-	& Apt.installed ["fetchmail"]
   where
 	ctx = Context "kitenet.net"
 	pinescript = "/usr/local/bin/pine"
 	dovecotusers = "/etc/dovecot/users"
 
-	ssmtp = Postfix.Service
-		(Postfix.InetService Nothing "ssmtp")
+	ssmtp = Postfix.Service 
+		(Postfix.InetService (Nothing, "ssmtp"))
 		"smtpd" Postfix.defServiceOpts
+
+-- Configures postfix to relay outgoing mail to kitenet.net, with
+-- verification via tls cert.
+postfixClientRelay :: Context -> Property HasInfo
+postfixClientRelay ctx = Postfix.mainCfFile `File.containsLines`
+	[ "relayhost = kitenet.net"
+	, "smtp_tls_CAfile = /etc/ssl/certs/joeyca.pem"
+	, "smtp_tls_cert_file = /etc/ssl/certs/postfix.pem"
+	, "smtp_tls_key_file = /etc/ssl/private/postfix.pem"
+	, "smtp_tls_loglevel = 0"
+	, "smtp_use_tls = yes"
+	]
+	`describe` "postfix client relay"
+	`onChange` Postfix.dedupMainCf
+	`onChange` Postfix.reloaded
+	`requires` hasJoeyCAChain
+	`requires` hasPostfixCert ctx
 
 -- Configures postfix to have the dkim milter, and no other milters.
 dkimMilter :: Property (HasInfo + DebianLike)
