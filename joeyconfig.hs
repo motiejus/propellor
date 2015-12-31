@@ -124,6 +124,7 @@ clam = host "clam.kitenet.net" $ props
 	& Apt.unattendedUpgrades
 	& Network.ipv6to4
 	& Systemd.persistentJournal
+	& Journald.systemMaxUse "500MiB"
 
 	& Tor.isRelay
 	& Tor.named "kite1"
@@ -147,14 +148,15 @@ oyster = standardSystem "oyster.kitenet.net" Unstable "amd64"
 	& Apt.unattendedUpgrades
 	& Network.ipv6to4
 	& Systemd.persistentJournal
+	& Journald.systemMaxUse "500MiB"
 
 	& Tor.isRelay
 	& Tor.named "kite2"
 	& Tor.bandwidthRate (Tor.PerMonth "400 GB")
 	
-	-- ssh on some extra ports to deal with horrible networks
-	-- while travelling
-	& alias "travelling.kitenet.net"
+	-- Nothing is using http port 80, so listen on
+	-- that port for ssh, for traveling on bad networks that
+	-- block 22.
 	& Ssh.listenPort 80
 
 orca :: Host
