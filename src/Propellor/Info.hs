@@ -131,7 +131,7 @@ ipv4 :: String -> Property (HasInfo + UnixLike)
 ipv4 = addDNS . Address . IPv4
 
 -- | Indicate that a host has an AAAA record in the DNS.
-ipv6 :: String -> Property (HasInfo + UnixLike)
+ipv6 :: String -> Property HasInfo
 ipv6 = addDNS . Address . IPv6
 
 -- | Indicates another name for the host in the DNS.
