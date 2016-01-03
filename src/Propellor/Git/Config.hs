@@ -7,14 +7,12 @@ import Utility.SafeCommand
 import Utility.Monad
 
 import Control.Monad
-import Control.Applicative
-import Prelude
 
 getGitConfigValue :: String -> IO (Maybe String)
 getGitConfigValue key = do
 	value <- catchMaybeIO $
 		takeWhile (/= '\n')
-			<$> readProcess"git" ["config", key]
+			<$> readProcess "git" ["config", key]
 	return $ case value of
 		Just v | not (null v) -> Just v
 		_ -> Nothing

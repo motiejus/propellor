@@ -11,7 +11,7 @@ import Prelude
 
 import Propellor.PrivData.Paths
 import Propellor.Message
-import Utility.Exception
+import Propellor.Git.Config
 import Utility.SafeCommand
 import Utility.Process
 import Utility.Process.NonConcurrent
@@ -21,13 +21,6 @@ import Utility.Tmp
 import Utility.FileSystemEncoding
 import Utility.Env
 
-getGpgBin :: IO String
-getGpgBin = do
-	gitGpgBin <- getGitConfigValue "gpg.program"
-	case gitGpgBin of
-		Nothing -> getEnvDefault "GNUPGBIN" "gpg"
-		Just b -> return b
-
 type KeyId = String
 
 getGpgBin :: IO String
@@ -36,6 +29,9 @@ getGpgBin = do
 	case gitGpgBin of
 		Nothing -> getEnvDefault "GNUPGBIN" "gpg"
 		Just b -> return b
+
+keyring :: FilePath
+keyring = privDataDir </> "keyring.gpg"
 
 -- Lists the keys in propellor's keyring.
 listPubKeys :: IO [KeyId]
@@ -144,15 +140,6 @@ reencryptPrivData = ifM (doesFileExist privDataFile)
 		gitAdd privDataFile
 	, return True
 	)
-
-getGitConfigValue :: String -> IO (Maybe String)
-getGitConfigValue key = do
-	value <- catchMaybeIO $
-		takeWhile (/= '\n')
-			<$> readProcess "git" ["config", key]
-	return $ case value of
-		Just v | not (null v) -> Just v
-		_ -> Nothing
 
 gitAdd :: FilePath -> IO Bool
 gitAdd f = boolSystem "git"
