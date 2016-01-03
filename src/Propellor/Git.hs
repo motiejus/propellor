@@ -34,15 +34,6 @@ setRepoUrl url = do
 	void $ boolSystem "git" [Param "config", Param (branchval "remote"), Param "origin"]
 	void $ boolSystem "git" [Param "config", Param (branchval "merge"), Param $ "refs/heads/"++branch]
 
-getGitConfigValue :: String -> IO (Maybe String)
-getGitConfigValue key = do
-	value <- catchMaybeIO $
-		takeWhile (/= '\n')
-			<$> readProcess "git" ["config", key]
-	return $ case value of
-		Just v | not (null v) -> Just v
-		_ -> Nothing
-
 -- `git config --bool propellor.blah` outputs "false" if propellor.blah is unset
 -- i.e. the git convention is that the default value of any git-config setting
 -- is "false".  So we don't need a Maybe Bool here.
@@ -70,10 +61,19 @@ hasGitRepo = doesFileExist ".git/HEAD"
 
 type Version = [Int]
 
-gitVersion :: IO Version
-gitVersion = extract <$> readProcess "git" ["--version"]
-  where
-	extract s = case lines s of
-		[] -> []
-		(l:_) -> mapMaybe readish $ segment (== '.') $
-			unwords $ drop 2 $ words l
+	void $ actionMessage "Pull from central git repository" $
+		boolSystem "git" [Param "fetch"]
+
+	oldsha <- getCurrentGitSha1 branchref
+
+	whenM (doesFileExist keyring) $
+		ifM (verifyOriginBranch originbranch)
+			( do
+				putStrLn $ "git branch " ++ originbranch ++ " gpg signature verified; merging"
+				hFlush stdout
+				void $ boolSystem "git" [Param "merge", Param originbranch]
+			, warningMessage $ "git branch " ++ originbranch ++ " is not signed with a trusted gpg key; refusing to deploy it! (Running with previous configuration instead.)"
+			)
+
+	newsha <- getCurrentGitSha1 branchref
+	return $ oldsha /= newsha
