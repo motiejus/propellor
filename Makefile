@@ -28,7 +28,7 @@ install:
 	&& export GIT_COMMITTER_DATE="$(DATE)" \
 	&& cd dist/gittmp && git init \
 	&& git add . \
-	&& git commit --date="$(DATE)" -q -m "distributed version of propellor" \
+	&& git commit -q -m "distributed version of propellor" \
 	&& git bundle create $(DESTDIR)/usr/src/propellor/propellor.git master HEAD \
 	&& git show-ref master --hash > $(DESTDIR)/usr/src/propellor/head
 	rm -rf dist/gittmp
