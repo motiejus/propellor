@@ -44,7 +44,7 @@ rule c tb tg rs = property ("firewall rule: " <> show r) addIpTable
 toIpTable :: Rule -> [CommandParam]
 toIpTable r =  map Param $
 	show (ruleChain r) :
-	toIpTableArg (ruleRules r) ++ [ "-j" , show $ ruleTarget r ]
+	toIpTableArg (ruleRules r) ++ [ "-j" , fromTarget $ ruleTarget r ]
 
 toIpTableArg :: Rules -> [String]
 toIpTableArg Everything = []
@@ -87,33 +87,12 @@ data Rule = Rule
 data Table = Filter | Nat | Mangle | Raw | Security
 	deriving (Eq, Show)
 
-instance ConfigurableValue Table where
-	val Filter = "filter"
-	val Nat = "nat"
-	val Mangle = "mangle"
-	val Raw = "raw"
-	val Security = "security"
-
-data Target = ACCEPT | REJECT | DROP | LOG | TargetCustom String
+data Target = ACCEPT | REJECT | DROP | LOG | CustomTarget String
 	deriving (Eq, Show)
 
-instance ConfigurableValue Target where
-	val ACCEPT = "ACCEPT"
-	val REJECT = "REJECT"
-	val DROP = "DROP"
-	val LOG = "LOG"
-	val (TargetCustom t) = t
-
-data Chain = INPUT | OUTPUT | FORWARD | PREROUTING | POSTROUTING | ChainCustom String
-	deriving (Eq, Show)
-
-instance ConfigurableValue Chain where
-	val INPUT = "INPUT"
-	val OUTPUT = "OUTPUT"
-	val FORWARD = "FORWARD"
-	val PREROUTING = "PREROUTING"
-	val POSTROUTING = "POSTROUTING"
-	val (ChainCustom c) = c
+fromTarget :: Target -> String
+fromTarget (CustomTarget ct) = ct
+fromTarget t = show t
 
 data Proto = TCP | UDP | ICMP
 	deriving (Eq, Show)
