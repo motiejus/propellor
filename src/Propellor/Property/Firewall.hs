@@ -43,9 +43,8 @@ rule c tb tg rs = property ("firewall rule: " <> show r) addIpTable
 
 toIpTable :: Rule -> [CommandParam]
 toIpTable r =  map Param $
-	val (ruleChain r) :
-	toIpTableArg (ruleRules r) ++
-	["-t", val (ruleTable r), "-j", val (ruleTarget r)]
+	show (ruleChain r) :
+	toIpTableArg (ruleRules r) ++ [ "-j" , show $ ruleTarget r ]
 
 toIpTableArg :: Rules -> [String]
 toIpTableArg Everything = []
@@ -60,54 +59,13 @@ toIpTableArg (Ctstate states) =
 	, "conntrack"
 	, "--ctstate", intercalate "," (map show states)
 	]
-toIpTableArg (ICMPType i) =
-	[ "-m"
-	, "icmp"
-	, "--icmp-type", val i
-	]
-toIpTableArg (RateLimit f) =
-	[ "-m"
-	, "limit"
-	, "--limit", val f
-	]
-toIpTableArg (TCPFlags m c) =
-	[ "-m"
-	, "tcp"
-	, "--tcp-flags"
-	, intercalate "," (map show m)
-	, intercalate "," (map show c)
-	]
-toIpTableArg TCPSyn = ["--syn"]
-toIpTableArg (GroupOwner (Group g)) =
-	[ "-m"
-	, "owner"
-	, "--gid-owner"
-	, g
-	]
 toIpTableArg (Source ipwm) =
 	[ "-s"
-	, intercalate "," (map val ipwm)
+	, intercalate "," (map fromIPWithMask ipwm)
 	]
 toIpTableArg (Destination ipwm) =
 	[ "-d"
-	, intercalate "," (map val ipwm)
-	]
-toIpTableArg (NotDestination ipwm) =
-	[ "!"
-	, "-d"
-	, intercalate "," (map val ipwm)
-	]
-toIpTableArg (NatDestination ip mport) =
-	[ "--to-destination"
-	, val ip ++ maybe "" (\p -> ":" ++ val p) mport
-	]
-toIpTableArg (Source ipwm) =
-	[ "-s"
-	, concat $ intersperse "," (map fromIPWithMask ipwm)
-	]
-toIpTableArg (Destination ipwm) =
-	[ "-d"
-	, concat $ intersperse "," (map fromIPWithMask ipwm)
+	, intercalate "," (map fromIPWithMask ipwm)
 	]
 toIpTableArg (r :- r') = toIpTableArg r <> toIpTableArg r'
 
