@@ -50,9 +50,9 @@ toIpTable r =  map Param $
 toIpTableArg :: Rules -> [String]
 toIpTableArg Everything = []
 toIpTableArg (Proto proto) = ["-p", map toLower $ show proto]
-toIpTableArg (DPort port) = ["--dport", val port]
-toIpTableArg (DPortRange (portf, portt)) =
-	["--dport", val portf ++ ":" ++ val portt]
+toIpTableArg (DPort (Port port)) = ["--dport", show port]
+toIpTableArg (DPortRange (Port f, Port t)) =
+	["--dport", show f ++ ":" ++ show t]
 toIpTableArg (InIFace iface) = ["-i", iface]
 toIpTableArg (OutIFace iface) = ["-o", iface]
 toIpTableArg (Ctstate states) =
@@ -181,7 +181,7 @@ data Rules
 	-- ^There is actually some order dependency between proto and port so this should be a specific
 	-- data type with proto + ports
 	| DPort Port
-	| DPortRange (Port, Port)
+	| DPortRange (Port,Port)
 	| InIFace Network.Interface
 	| OutIFace Network.Interface
 	| Ctstate [ ConnectionState ]
