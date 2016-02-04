@@ -7,14 +7,15 @@ module Propellor.Property.Firewall (
 	installed,
 	Chain(..),
 	Table(..),
-	Target(..),
+	TargetFilter(..),
+	TargetNat(..),
+	TargetMangle(..),
+	TargetRaw(..),
+	TargetSecurity(..),
 	Proto(..),
 	Rules(..),
 	ConnectionState(..),
-	ICMPTypeMatch(..),
-	TCPFlag(..),
-	Frequency(..),
-	IPWithMask(..),
+	IPWithMask(..)
 ) where
 
 import Data.Monoid
@@ -28,8 +29,8 @@ import qualified Propellor.Property.Network as Network
 installed :: Property DebianLike
 installed = Apt.installed ["iptables"]
 
-rule :: Chain -> Table -> Target -> Rules -> Property Linux
-rule c tb tg rs = property ("firewall rule: " <> show r) addIpTable
+rule :: Chain -> Table -> Rules -> Property NoInfo
+rule c t rs = property ("firewall rule: " <> show r) addIpTable
   where
 	r = Rule c tb tg rs
 	addIpTable = liftIO $ do
@@ -44,7 +45,7 @@ rule c tb tg rs = property ("firewall rule: " <> show r) addIpTable
 toIpTable :: Rule -> [CommandParam]
 toIpTable r =  map Param $
 	show (ruleChain r) :
-	toIpTableArg (ruleRules r) ++ [ "-j" , fromTarget $ ruleTarget r ]
+	toIpTableArg (ruleRules r) ++ toIpTableTable (ruleTable r)
 
 toIpTableArg :: Rules -> [String]
 toIpTableArg Everything = []
@@ -78,21 +79,75 @@ fromIPWithMask (IPWithIPMask ip ipm) = fromIPAddr ip ++ "/" ++ fromIPAddr ipm
 fromIPWithMask (IPWithNumMask ip m) = fromIPAddr ip ++ "/" ++ show m
 
 data Rule = Rule
-	{ ruleChain  :: Chain
-	, ruleTable  :: Table
-	, ruleTarget :: Target
-	, ruleRules  :: Rules
+	{ ruleChain :: Chain
+	, ruleTable :: Table
+	, ruleRules :: Rules
 	} deriving (Eq, Show)
 
-data Table = Filter | Nat | Mangle | Raw | Security
+data Table = Filter TargetFilter | Nat TargetNat | Mangle TargetMangle | Raw TargetRaw | Security TargetSecurity
 	deriving (Eq, Show)
 
-data Target = ACCEPT | REJECT | DROP | LOG | CustomTarget String
+toIpTableTable :: Table -> [String]
+toIpTableTable f = ["-t", table, "-j", target]
+  where
+	(table, target) = toIpTableTable' f
+
+toIpTableTable' :: Table -> (String, String)
+toIpTableTable' (Filter target) = ("filter", fromTargetFilter target)
+toIpTableTable' (Nat target) = ("nat", fromTargetNat target)
+toIpTableTable' (Mangle target) = ("mangle", fromTargetMangle target)
+toIpTableTable' (Raw target) = ("raw", fromTargetRaw target)
+toIpTableTable' (Security target) = ("security", fromTargetSecurity target)
+
+data Chain = INPUT | OUTPUT | FORWARD
 	deriving (Eq, Show)
 
-fromTarget :: Target -> String
-fromTarget (CustomTarget ct) = ct
-fromTarget t = show t
+data TargetFilter = ACCEPT | REJECT | DROP | LOG | FilterCustom String
+	deriving (Eq, Show)
+
+fromTargetFilter :: TargetFilter -> String
+fromTargetFilter ACCEPT = "ACCEPT"
+fromTargetFilter REJECT = "REJECT"
+fromTargetFilter DROP = "DROP"
+fromTargetFilter LOG = "LOG"
+fromTargetFilter (FilterCustom f) = f
+
+data TargetNat = NatPREROUTING | NatOUTPUT | NatPOSTROUTING | NatCustom String
+	deriving (Eq, Show)
+
+fromTargetNat :: TargetNat -> String
+fromTargetNat NatPREROUTING = "PREROUTING"
+fromTargetNat NatOUTPUT = "OUTPUT"
+fromTargetNat NatPOSTROUTING = "POSTROUTING"
+fromTargetNat (NatCustom f) = f
+
+data TargetMangle = ManglePREROUTING | MangleOUTPUT | MangleINPUT | MangleFORWARD | ManglePOSTROUTING | MangleCustom String
+	deriving (Eq, Show)
+
+fromTargetMangle :: TargetMangle -> String
+fromTargetMangle ManglePREROUTING = "PREROUTING"
+fromTargetMangle MangleOUTPUT = "OUTPUT"
+fromTargetMangle MangleINPUT = "INPUT"
+fromTargetMangle MangleFORWARD = "FORWARD"
+fromTargetMangle ManglePOSTROUTING = "POSTROUTING"
+fromTargetMangle (MangleCustom f) = f
+
+data TargetRaw = RawPREROUTING | RawOUTPUT | RawCustom String
+	deriving (Eq, Show)
+
+fromTargetRaw :: TargetRaw -> String
+fromTargetRaw RawPREROUTING = "PREROUTING"
+fromTargetRaw RawOUTPUT = "OUTPUT"
+fromTargetRaw (RawCustom f) = f
+
+data TargetSecurity = SecurityINPUT | SecurityOUTPUT | SecurityFORWARD | SecurityCustom String
+	deriving (Eq, Show)
+
+fromTargetSecurity :: TargetSecurity -> String
+fromTargetSecurity SecurityINPUT = "INPUT"
+fromTargetSecurity SecurityOUTPUT = "OUTPUT"
+fromTargetSecurity SecurityFORWARD = "FORWARD"
+fromTargetSecurity (SecurityCustom f) = f
 
 data Proto = TCP | UDP | ICMP
 	deriving (Eq, Show)
