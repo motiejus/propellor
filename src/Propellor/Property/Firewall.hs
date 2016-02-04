@@ -101,15 +101,23 @@ toIpTableArg (NatDestination ip mport) =
 	[ "--to-destination"
 	, val ip ++ maybe "" (\p -> ":" ++ val p) mport
 	]
+toIpTableArg (Source ipwm) =
+	[ "-s"
+	, concat $ intersperse "," (map fromIPWithMask ipwm)
+	]
+toIpTableArg (Destination ipwm) =
+	[ "-d"
+	, concat $ intersperse "," (map fromIPWithMask ipwm)
+	]
 toIpTableArg (r :- r') = toIpTableArg r <> toIpTableArg r'
 
 data IPWithMask = IPWithNoMask IPAddr | IPWithIPMask IPAddr IPAddr | IPWithNumMask IPAddr Int
 	deriving (Eq, Show)
 
-instance ConfigurableValue IPWithMask where
-	val (IPWithNoMask ip) = val ip
-	val (IPWithIPMask ip ipm) = val ip ++ "/" ++ val ipm
-	val (IPWithNumMask ip m) = val ip ++ "/" ++ val m
+fromIPWithMask :: IPWithMask -> String
+fromIPWithMask (IPWithNoMask ip) = fromIPAddr ip
+fromIPWithMask (IPWithIPMask ip ipm) = fromIPAddr ip ++ "/" ++ fromIPAddr ipm
+fromIPWithMask (IPWithNumMask ip m) = fromIPAddr ip ++ "/" ++ show m
 
 data Rule = Rule
 	{ ruleChain  :: Chain
@@ -185,15 +193,8 @@ data Rules
 	| InIFace Network.Interface
 	| OutIFace Network.Interface
 	| Ctstate [ ConnectionState ]
-	| ICMPType ICMPTypeMatch
-	| RateLimit Frequency
-	| TCPFlags TCPFlagMask TCPFlagComp
-	| TCPSyn
-	| GroupOwner Group
 	| Source [ IPWithMask ]
 	| Destination [ IPWithMask ]
-	| NotDestination [ IPWithMask ]
-	| NatDestination IPAddr (Maybe Port)
 	| Rules :- Rules   -- ^Combine two rules
 	deriving (Eq, Show)
 
