@@ -20,6 +20,7 @@ import qualified Propellor.Property.Apache as Apache
 import qualified Propellor.Property.Postfix as Postfix
 import qualified Propellor.Property.Systemd as Systemd
 import qualified Propellor.Property.Fail2Ban as Fail2Ban
+import qualified Propellor.Property.LetsEncrypt as LetsEncrypt
 import Utility.FileMode
 
 import Data.List
@@ -315,6 +316,9 @@ annexWebSite origin hn uuid remotes = propertyList (hn ++" website using git-ann
 		, "  </Directory>"
 		]
 
+letos :: LetsEncrypt.AgreeTOS
+letos = LetsEncrypt.AgreeTOS (Just "id@joeyh.name")
+
 apacheSite :: HostName -> Bool -> Apache.ConfigFile -> RevertableProperty NoInfo
 apacheSite hn withssl middle = Apache.siteEnabled hn $ apachecfg hn withssl middle
 
@@ -336,11 +340,7 @@ apachecfg hn withssl middle
 		, "  CustomLog /var/log/apache2/access.log combined"
 		, "  ServerSignature On"
 		, "  "
-		, "  <Directory \"/usr/share/apache2/icons\">"
-		, "      Options Indexes MultiViews"
-		, "      AllowOverride None"
-		, Apache.allowAll
-		, "  </Directory>"
+		, Apache.iconDir
 		, "</VirtualHost>"
 		]
 	  where
