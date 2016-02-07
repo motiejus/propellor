@@ -15,49 +15,35 @@ restarted = Service.restarted "apache2"
 reloaded :: Property DebianLike
 reloaded = Service.reloaded "apache2"
 
--- | A basic virtual host, publishing a directory, and logging to
--- the combined apache log file.
-virtualHost :: HostName -> Port -> FilePath -> RevertableProperty NoInfo
-virtualHost hn (Port p) docroot = siteEnabled hn
-	[ "<VirtualHost *:"++show p++">"
-	, "ServerName "++hn++":"++show p
-	, "DocumentRoot " ++ docroot
-	, "ErrorLog /var/log/apache2/error.log"
-	, "LogLevel warn"
-	, "CustomLog /var/log/apache2/access.log combined"
-	, "ServerSignature On"
-	, "</VirtualHost>"
-	]
+type ConfigFile = [String]
 
-type ConfigFile = [ConfigLine]
+siteEnabled :: Domain -> ConfigFile -> RevertableProperty NoInfo
+siteEnabled domain cf = siteEnabled' domain cf <!> siteDisabled domain
 
-siteEnabled :: HostName -> ConfigFile -> RevertableProperty NoInfo
-siteEnabled hn cf = enable <!> disable
-  where
-	enable = combineProperties ("apache site enabled " ++ hn)
-		[ siteAvailable hn cf
+siteEnabled' :: Domain -> ConfigFile -> Property NoInfo
+siteEnabled' domain cf = combineProperties ("apache site enabled " ++ domain)
+	[ siteAvailable domain cf
+		`requires` installed
+		`onChange` reloaded
+	, check (not <$> isenabled) 
+		(cmdProperty "a2ensite" ["--quiet", domain])
 			`requires` installed
 			`onChange` reloaded
-		, check (not <$> isenabled) 
-			(cmdProperty "a2ensite" ["--quiet", hn])
-				`requires` installed
-				`onChange` reloaded
-		]
-	disable = siteDisabled hn
-	isenabled = boolSystem "a2query" [Param "-q", Param "-s", Param hn]
+	]
+  where
+	isenabled = boolSystem "a2query" [Param "-q", Param "-s", Param domain]
 
-siteDisabled :: HostName -> Property NoInfo
-siteDisabled hn = combineProperties
-	("apache site disabled " ++ hn) 
-	(map File.notPresent (siteCfg hn))
-		`onChange` (cmdProperty "a2dissite" ["--quiet", hn] `assume` MadeChange)
+siteDisabled :: Domain -> Property NoInfo
+siteDisabled domain = combineProperties
+	("apache site disabled " ++ domain) 
+	(map File.notPresent (siteCfg domain))
+		`onChange` (cmdProperty "a2dissite" ["--quiet", domain] `assume` MadeChange)
 		`requires` installed
 		`onChange` reloaded
 
-siteAvailable :: Domain -> ConfigFile -> Property DebianLike
+siteAvailable :: Domain -> ConfigFile -> Property NoInfo
 siteAvailable domain cf = combineProperties ("apache site available " ++ domain) $
-	toProps $ map tightenTargets $
-		map (`File.hasContent` (comment:cf)) (siteCfg domain)
+	map (`File.hasContent` (comment:cf)) (siteCfg domain)
   where
 	comment = "# deployed with propellor, do not modify"
 
@@ -112,7 +98,7 @@ siteCfg domain =
 	[ "/etc/apache2/sites-available/" ++ domain
 	-- Debian 2.4+
 	, "/etc/apache2/sites-available/" ++ domain ++ ".conf"
-	]
+	] 
 
 -- | Configure apache to use SNI to differentiate between
 -- https hosts.
@@ -144,37 +130,20 @@ allowAll = unlines
 	, "</IfVersion>"
 	]
 
--- | Config file fragment that can be inserted into a <VirtualHost>
--- stanza to allow apache to display directory index icons.
-iconDir :: ConfigLine
-iconDir = unlines
-	[ "<Directory \"/usr/share/apache2/icons\">"
-	, "Options Indexes MultiViews"
-	, "AllowOverride None"
-	, allowAll
-	, "  </Directory>"
-	]
-
 type WebRoot = FilePath
 
 -- | A basic virtual host, publishing a directory, and logging to
 -- the combined apache log file. Not https capable.
-virtualHost :: Domain -> Port -> WebRoot -> RevertableProperty DebianLike DebianLike
-virtualHost domain port docroot = virtualHost' domain port docroot []
-
--- | Like `virtualHost` but with additional config lines added.
-virtualHost' :: Domain -> Port -> WebRoot -> [ConfigLine] -> RevertableProperty DebianLike DebianLike
-virtualHost' domain port docroot addedcfg = siteEnabled domain $
-	[ "<VirtualHost *:" ++ val port ++ ">"
-	, "ServerName " ++ domain ++ ":" ++ val port
+virtualHost :: Domain -> Port -> WebRoot -> RevertableProperty NoInfo
+virtualHost domain (Port p) docroot = siteEnabled domain
+	[ "<VirtualHost *:"++show p++">"
+	, "ServerName "++domain++":"++show p
 	, "DocumentRoot " ++ docroot
 	, "ErrorLog /var/log/apache2/error.log"
 	, "LogLevel warn"
 	, "CustomLog /var/log/apache2/access.log combined"
 	, "ServerSignature On"
-	]
-	++ addedcfg ++
-	[ "</VirtualHost>"
+	, "</VirtualHost>"
 	]
 
 -- | A virtual host using https, with the certificate obtained
@@ -185,23 +154,14 @@ virtualHost' domain port docroot addedcfg = siteEnabled domain $
 -- Example:
 --
 -- > httpsVirtualHost "example.com" "/var/www"
--- > 	(LetsEncrypt.AgreeTOS (Just "me@my.domain"))
---
--- Note that reverting this property does not remove the certificate from
--- letsencrypt's cert store.
-httpsVirtualHost :: Domain -> WebRoot -> LetsEncrypt.AgreeTOS -> RevertableProperty DebianLike DebianLike
-httpsVirtualHost domain docroot letos = httpsVirtualHost' domain docroot letos []
-
--- | Like `httpsVirtualHost` but with additional config lines added.
-httpsVirtualHost' :: Domain -> WebRoot -> LetsEncrypt.AgreeTOS -> [ConfigLine] -> RevertableProperty DebianLike DebianLike
-httpsVirtualHost' domain docroot letos addedcfg = setup <!> teardown
+-- > 	(LetsEncrypt.AgreeTos (Just "me@my.domain"))
+httpsVirtualHost :: Domain -> WebRoot -> LetsEncrypt.AgreeTOS -> Property NoInfo
+httpsVirtualHost domain docroot letos = setup
+	`requires` modEnabled "rewrite"
+	`requires` modEnabled "ssl"
+	`before` LetsEncrypt.letsEncrypt letos domain docroot certinstaller
   where
-	setup = setuphttp
-		`requires` modEnabled "rewrite"
-		`requires` modEnabled "ssl"
-		`before` setuphttps
-	teardown = siteDisabled domain
-	setuphttp = siteEnabled' domain $
+	setup = siteEnabled' domain $
 		-- The sslconffile is only created after letsencrypt gets
 		-- the cert. The "*" is needed to make apache not error
 		-- when the file doesn't exist.
@@ -214,31 +174,26 @@ httpsVirtualHost' domain docroot letos addedcfg = setup <!> teardown
 			-- Everything else redirects to https
 			, "RewriteRule ^/(.*) https://" ++ domain ++ "/$1 [L,R,NE]"
 			]
-	setuphttps = LetsEncrypt.letsEncrypt letos domain docroot
-		`onChange` postsetuphttps
-	postsetuphttps = combineProperties (domain ++ " ssl cert installed") $ props
-		& File.dirExists (takeDirectory cf)
-		& File.hasContent cf sslvhost
-			`onChange` reloaded
-		-- always reload since the cert has changed
-		& reloaded
-	  where
-		cf = sslconffile "letsencrypt"
-		sslvhost = vhost (Port 443)
-			[ "SSLEngine on"
-			, "SSLCertificateFile " ++ LetsEncrypt.certFile domain
-			, "SSLCertificateKeyFile " ++ LetsEncrypt.privKeyFile domain
-			, "SSLCertificateChainFile " ++ LetsEncrypt.chainFile domain
-			]
+	certinstaller _domain certfile privkeyfile chainfile _fullchainfile =
+		File.hasContent (sslconffile "letsencrypt")
+			( vhost (Port 443)
+				[ "SSLEngine on"
+				, "SSLCertificateFile " ++ certfile
+				, "SSLCertificateKeyFile" ++ privkeyfile
+				, "SSLCertificateChainFile " ++ chainfile
+				]
+			)
+			-- always reload; the cert has changed
+			`before` reloaded
 	sslconffile s = "/etc/apache2/sites-available/ssl/" ++ domain ++ "/" ++ s ++ ".conf"
-	vhost p ls =
-		[ "<VirtualHost *:" ++ val p ++">"
-		, "ServerName " ++ domain ++ ":" ++ val p
+	vhost (Port p) ls = 
+		[ "<VirtualHost *:"++show p++">"
+		, "ServerName "++domain++":"++show p
 		, "DocumentRoot " ++ docroot
 		, "ErrorLog /var/log/apache2/error.log"
 		, "LogLevel warn"
 		, "CustomLog /var/log/apache2/access.log combined"
 		, "ServerSignature On"
-		] ++ ls ++ addedcfg ++
+		] ++ ls ++
 		[ "</VirtualHost>"
 		]
