@@ -38,11 +38,7 @@ data NumClients = OnlyClient | MultipleClients
 --
 -- Note that this property does not make obnam encrypt the backup
 -- repository.
---
--- Since obnam uses a fair amount of system resources, only one obnam
--- backup job will be run at a time. Other jobs will wait their turns to
--- run.
-backup :: FilePath -> Cron.Times -> [ObnamParam] -> NumClients -> Property DebianLike
+backup :: FilePath -> Cron.Times -> [ObnamParam] -> NumClients -> Property NoInfo
 backup dir crontimes params numclients =
 	backup' dir crontimes params numclients
 		`requires` restored dir params
@@ -65,31 +61,25 @@ backup' dir crontimes params numclients = cronjob `describe` desc
   where
 	desc = dir ++ " backed up by obnam"
 	cronjob = Cron.niceJob ("obnam_backup" ++ dir) crontimes (User "root") "/" $
-		"flock " ++ shellEscape lockfile ++ " sh -c " ++ shellEscape cmdline
-	lockfile = "/var/lock/propellor-obnam.lock"
-	cmdline = unwords $ catMaybes
-		[ if numclients == OnlyClient
-			-- forcelock fails if repo does not exist yet
-			then Just $ forcelockcmd ++ " 2>/dev/null ;"
-			else Nothing
-		, Just backupcmd
-		, if any isKeepParam params
-			then Just $ "&& " ++ forgetcmd
-			else Nothing
-		]
-	forcelockcmd = unwords $
-		[ "obnam"
-		, "force-lock"
-		] ++ map shellEscape params
-	backupcmd = unwords $
-		[ "obnam"
-		, "backup"
-		, shellEscape dir
-		] ++ map shellEscape params
-	forgetcmd = unwords $
-		[ "obnam"
-		, "forget"
-		] ++ map shellEscape params
+		intercalate "&&" $ catMaybes
+			[ if numclients == OnlyClient
+				then Just $ unwords $
+					[ "obnam"
+					, "force-lock"
+					] ++ map shellEscape params
+				else Nothing
+			, Just $ unwords $
+				[ "obnam"
+				, "backup"
+				, shellEscape dir
+				] ++ map shellEscape params
+			, if any isKeepParam params
+				then Just $ unwords $
+					[ "obnam"
+					, "forget"
+					] ++ map shellEscape params
+				else Nothing
+			]
 
 -- | Restores a directory from an obnam backup.
 --
@@ -150,10 +140,10 @@ keepParam ps = "--keep=" ++ intercalate "," (map go ps)
 	go (KeepWeeks n) = mk n 'w'
 	go (KeepMonths n) = mk n 'm'
 	go (KeepYears n) = mk n 'y'
-	mk n c = val n ++ [c]
+	mk n c = show n ++ [c]
 
 isKeepParam :: ObnamParam -> Bool
 isKeepParam p = "--keep=" `isPrefixOf` p
 
-installed :: Property DebianLike
+installed :: Property NoInfo
 installed = Apt.installed ["obnam"]
