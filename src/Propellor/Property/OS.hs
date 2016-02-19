@@ -83,18 +83,14 @@ cleanInstallOnce confirmation = check (not <$> doesFileExist flagfile) $
 			`requires`
 		osbootstrapped
 
-	osbootstrapped :: Property Linux
-	osbootstrapped = withOS (newOSDir ++ " bootstrapped") $ \w o -> case o of
-		(Just d@(System (Debian _ _) _)) -> ensureProperty w $
-			debootstrap d
-		(Just u@(System (Buntish _) _)) -> ensureProperty w $
-			debootstrap u
-		_ -> unsupportedOS'
-
-	debootstrap :: System -> Property Linux
-	debootstrap targetos =
-		-- Install debootstrap from source, since we don't know
-		-- what OS we're currently running in.
+	osbootstrapped = withOS (newOSDir ++ " bootstrapped") $ \o -> case o of
+		(Just d@(System (Debian _) _)) -> debootstrap d
+		(Just u@(System (FooBuntu _) _)) -> debootstrap u
+		_ -> error "os is not declared to be Debian or *buntu"
+	
+	debootstrap targetos = ensureProperty $
+		-- Ignore the os setting, and install debootstrap from
+		-- source, since we don't know what OS we're running in yet.
 		Debootstrap.built' Debootstrap.sourceInstall
 			newOSDir targetos Debootstrap.DefaultConfig
 		-- debootstrap, I wish it was faster..
