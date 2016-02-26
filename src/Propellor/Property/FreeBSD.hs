@@ -1,6 +1,7 @@
--- | Maintainer: 2016 Evan Cofsky <evan@theunixman.com>
--- 
--- FreeBSD Properties
+-- | FreeBSD Properties
+--
+-- Copyright 2016 Evan Cofsky <evan@theunixman.com>
+-- License: BSD 2-clause
 --
 -- This module is designed to be imported unqualified.
 

@@ -17,8 +17,9 @@ type ShellCommand = String
 -- Shell command line to ensure propellor is bootstrapped and ready to run.
 -- Should be run inside the propellor config dir, and will install
 -- all necessary build dependencies and build propellor.
-bootstrapPropellorCommand :: Maybe System -> ShellCommand
-bootstrapPropellorCommand msys = checkDepsCommand msys ++
+bootstrapPropellorCommand :: System -> ShellCommand
+bootstrapPropellorCommand sys =
+  (checkDepsCommand sys) ++
 	"&& if ! test -x ./propellor; then "
 		++ buildCommand ++
 	"; fi;" ++ checkBinaryCommand
@@ -29,7 +30,8 @@ checkBinaryCommand :: ShellCommand
 checkBinaryCommand = "if test -x ./propellor && ! ./propellor --check; then " ++ go ++ "; fi"
   where
 	go = intercalate " && "
-		[ "cabal clean"
+		[ "./propellor --check"
+		,"cabal clean"
 		, buildCommand
 		]
 
@@ -42,8 +44,8 @@ buildCommand = intercalate " && "
 
 -- Run cabal configure to check if all dependencies are installed;
 -- if not, run the depsCommand.
-checkDepsCommand :: Maybe System -> ShellCommand
-checkDepsCommand sys = "if ! cabal configure >/dev/null 2>&1; then " ++ depsCommand sys ++ "; fi"
+checkDepsCommand :: System -> ShellCommand
+checkDepsCommand sys = "if ! cabal configure >/dev/null 2>&1; then " ++ (depsCommand sys) ++ "; fi"
 
 -- Install build dependencies of propellor.
 --
@@ -55,18 +57,12 @@ checkDepsCommand sys = "if ! cabal configure >/dev/null 2>&1; then " ++ depsComm
 -- So, as a second step, cabal is used to install all dependencies.
 --
 -- Note: May succeed and leave some deps not installed.
-depsCommand :: Maybe System -> ShellCommand
-depsCommand msys = "( " ++ intercalate " ; " (concat [osinstall, cabalinstall]) ++ " ) || true"
+depsCommand :: System -> ShellCommand
+depsCommand (System distr _) = "( " ++ intercalate " ; " (concat [osinstall, cabalinstall]) ++ " ) || true"
   where
-	osinstall = case msys of
-		Just (System (FreeBSD _) _) -> map pkginstall fbsddeps
-		Just (System (ArchLinux) _) -> map pacmaninstall archlinuxdeps
-		Just (System (Debian _ _) _) -> useapt
-		Just (System (Buntish _) _) -> useapt
-		-- assume a debian derived system when not specified
-		Nothing -> useapt
-
-	useapt = "apt-get update" : map aptinstall debdeps
+	osinstall = case distr of
+	  (FreeBSD _) -> map pkginstall fbsddeps
+	  _ -> "apt-get update" : map aptinstall debdeps
 
 	cabalinstall =
 		[ "cabal update"
@@ -74,6 +70,7 @@ depsCommand msys = "( " ++ intercalate " ; " (concat [osinstall, cabalinstall]) 
 		]
 
 	aptinstall p = "DEBIAN_FRONTEND=noninteractive apt-get --no-upgrade --no-install-recommends -y install " ++ p
+	pkginstall p = "ASSUME_ALWAYS_YES=yes pkg install " ++ p
 
 	-- This is the same deps listed in debian/control.
 	debdeps =
@@ -94,9 +91,33 @@ depsCommand msys = "( " ++ intercalate " ; " (concat [osinstall, cabalinstall]) 
 		, "libghc-text-dev"
 		, "make"
 		]
+	fbsddeps =
+		[ "gnupg"
+		, "ghc"
+		, "hs-cabal-install"
+		, "hs-async"
+		, "hs-MissingH"
+		, "hs-hslogger"
+		, "hs-unix-compat"
+		, "hs-ansi-terminal"
+		, "hs-IfElse"
+		, "hs-network"
+		, "hs-mtl"
+		, "hs-transformers-base"
+		, "hs-exceptions"
+		, "hs-stm"
+		, "hs-text"
+		, "gmake"
+		]
 
-installGitCommand :: ShellCommand
-installGitCommand = "if ! git --version >/dev/null; then apt-get update && DEBIAN_FRONTEND=noninteractive apt-get --no-install-recommends --no-upgrade -y install git; fi"
+
+installGitCommand :: System -> ShellCommand
+installGitCommand (System distr _) =
+  case distr of
+    (FreeBSD _) ->
+	       "if ! git --version >/dev/null; then ASSUME_ALWAYS_YES=yes pkg update && ASSUME_ALWAYS_YES=yes pkg install git; fi"
+    _ ->
+	       "if ! git --version >/dev/null; then apt-get update && DEBIAN_FRONTEND=noninteractive apt-get --no-install-recommends --no-upgrade -y install git; fi"
 
 buildPropellor :: Maybe Host -> IO ()
 buildPropellor mh = unlessM (actionMessage "Propellor build" (build msys)) $

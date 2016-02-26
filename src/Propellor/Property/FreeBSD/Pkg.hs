@@ -1,8 +1,9 @@
--- | Maintainer: 2016 Evan Cofsky <evan@theunixman.com>
--- 
--- FreeBSD pkgng properties
+-- | FreeBSD pkgng properties
+--
+-- Copyright 2016 Evan Cofsky <evan@theunixman.com>
+-- License: BSD 2-clause
 
-{-# Language ScopedTypeVariables, GeneralizedNewtypeDeriving, DeriveDataTypeable #-}
+{-# Language ScopedTypeVariables, GeneralizedNewtypeDeriving #-}
 
 module Propellor.Property.FreeBSD.Pkg where
 
@@ -22,8 +23,8 @@ runPkg cmd args =
 	in
 		lines <$> readProcess p a
 
-pkgCmdProperty :: String -> [String] -> UncheckedProperty FreeBSD
-pkgCmdProperty cmd args = tightenTargets $ 
+pkgCmdProperty :: String -> [String] -> UncheckedProperty NoInfo
+pkgCmdProperty cmd args =
 	let
 		(p, a) = pkgCommand cmd args
 	in
@@ -39,51 +40,50 @@ pkgCmd cmd args =
 newtype PkgUpdate = PkgUpdate String
 	deriving (Typeable, Monoid, Show)
 instance IsInfo PkgUpdate where
-	propagateInfo _ = PropagateInfo False
+	propagateInfo _ = False
 
 pkgUpdated :: PkgUpdate -> Bool
 pkgUpdated (PkgUpdate _) = True
 
-update :: Property (HasInfo + FreeBSD)
+update :: Property HasInfo
 update =
 	let
 		upd = pkgCmd "update" []
 		go = ifM (pkgUpdated <$> askInfo) ((noChange), (liftIO upd >> return MadeChange))
 	in
-		(property "pkg update has run" go :: Property FreeBSD)
-			`setInfoProperty` (toInfo (PkgUpdate ""))
+		infoProperty "pkg update has run" go (addInfo mempty (PkgUpdate "")) []
 
 newtype PkgUpgrade = PkgUpgrade String
 	deriving (Typeable, Monoid, Show)
-
 instance IsInfo PkgUpgrade where
-	propagateInfo _ = PropagateInfo False
+	propagateInfo _ = False
 
 pkgUpgraded :: PkgUpgrade -> Bool
 pkgUpgraded (PkgUpgrade _) = True
 
-upgrade :: Property (HasInfo + FreeBSD)
+upgrade :: Property HasInfo
 upgrade =
 	let
 		upd = pkgCmd "upgrade" []
 		go = ifM (pkgUpgraded <$> askInfo) ((noChange), (liftIO upd >> return MadeChange))
 	in
-		(property "pkg upgrade has run" go :: Property FreeBSD)
-			`setInfoProperty` (toInfo (PkgUpdate ""))
-			`requires` update
+		infoProperty "pkg upgrade has run" go (addInfo mempty (PkgUpgrade "")) [] `requires` update
 
 type Package = String
 
-installed :: Package -> Property FreeBSD
-installed pkg = check (isInstallable pkg) $ pkgCmdProperty "install" [pkg]
+installed :: Package -> Property NoInfo
+installed pkg =
+	check (isInstallable pkg) $ pkgCmdProperty "install" [pkg]
 
 isInstallable :: Package -> IO Bool
-isInstallable p = (not <$> isInstalled p) <&&> exists p
+isInstallable p = do
+	l <- isInstalled p
+	e <- exists p
+
+	return $ (not l) && e
 
 isInstalled :: Package -> IO Bool
-isInstalled p = (runPkg "info" [p] >> return True)
-	`catchIO` (\_ -> return False)
+isInstalled p = catch (runPkg "info" [p] >> return True) (\(_ :: IOError ) -> return False)
 
 exists :: Package -> IO Bool
-exists p = (runPkg "search" ["--search", "name", "--exact", p] >> return True)
-	`catchIO` (\_ -> return False)
+exists p = catch (runPkg "search" ["--search", "name", "--exact", p] >> return True) (\(_ :: IOError ) -> return False)

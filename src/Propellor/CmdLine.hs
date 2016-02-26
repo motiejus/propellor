@@ -137,7 +137,7 @@ defaultMain hostlist = withConcurrentOutput $ do
 
 	withhost :: HostName -> (Host -> IO ()) -> IO ()
 	withhost hn a = maybe (unknownhost hn hostlist) a (findHost hostlist hn)
-	
+
 	runhost hn = onlyprocess $ withhost hn mainProperties
 
 	onlyprocess = onlyProcess (localdir </> ".lock")

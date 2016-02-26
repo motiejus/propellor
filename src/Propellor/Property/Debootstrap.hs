@@ -50,9 +50,10 @@ toParams (c1 :+ c2) = toParams c1 <> toParams c2
 built :: FilePath -> System -> DebootstrapConfig -> Property HasInfo
 built target system config = built' (toProp installed) target system config
 
-built' :: Property Linux -> FilePath -> System -> DebootstrapConfig -> Property Linux
-built' installprop target system@(System _ arch) config = 
-	go `before` oldpermfix
+built' :: (Combines (Property NoInfo) (Property i)) => Property i -> FilePath -> System -> DebootstrapConfig -> Property (CInfo NoInfo i)
+built' installprop target system@(System _ arch) config =
+	check (unpopulated target <||> ispartial) setupprop
+		`requires` installprop
   where
 	go = check (unpopulated target <||> ispartial) setupprop
 		`requires` installprop
@@ -83,10 +84,11 @@ built' installprop target system@(System _ arch) config =
 			return True
 		, return False
 		)
-	
+
 extractSuite :: System -> Maybe String
 extractSuite (System (Debian s) _) = Just $ Apt.showSuite s
 extractSuite (System (Buntish r) _) = Just r
+extractSuite _ = error "Not supported unless Debian or Buntish."
 
 -- | Ensures debootstrap is installed.
 --
@@ -96,9 +98,11 @@ extractSuite (System (Buntish r) _) = Just r
 installed :: RevertableProperty NoInfo
 installed = install <!> remove
   where
-	install = check (isNothing <$> programPath) $
-		(aptinstall `pickOS` sourceInstall)
-			`describe` "debootstrap installed"
+	install = withOS "debootstrap installed" $ \o ->
+		ifM (liftIO $ isJust <$> programPath)
+			( return NoChange
+			, ensureProperty (installon o)
+			)
 
 	installon (Just (System (Debian _) _)) = aptinstall
 	installon (Just (System (Buntish _) _)) = aptinstall
@@ -108,7 +112,7 @@ installed = install <!> remove
 	removefrom (Just (System (Debian _) _)) = aptremove
 	removefrom (Just (System (Buntish _) _)) = aptremove
 	removefrom _ = sourceRemove
-			
+
 	aptinstall = Apt.installed ["debootstrap"]
 	aptremove = Apt.removed ["debootstrap"]
 

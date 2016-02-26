@@ -1,14 +1,18 @@
--- | Maintainer: 2016 Evan Cofsky <evan@theunixman.com>
+-- | FreeBSD Poudriere properties
 --
--- FreeBSD Poudriere properties
+-- Copyright 2016 Evan Cofsky <evan@theunixman.com>
+-- License: BSD 2-clause
 
-{-# Language GeneralizedNewtypeDeriving, DeriveDataTypeable #-}
+{-# Language GeneralizedNewtypeDeriving #-}
+
+-- | Maintainer: Evan Cofsky <evan@theunixman.com>
 
 module Propellor.Property.FreeBSD.Poudriere where
 
 import Propellor.Base
 import Propellor.Types.Info
 import Data.List
+import Data.String (IsString(..))
 
 import qualified Propellor.Property.FreeBSD.Pkg as Pkg
 import qualified Propellor.Property.ZFS as ZFS
@@ -19,30 +23,30 @@ poudriereConfigPath = "/usr/local/etc/poudriere.conf"
 
 newtype PoudriereConfigured = PoudriereConfigured String
 	deriving (Typeable, Monoid, Show)
-
 instance IsInfo PoudriereConfigured where
-	propagateInfo _ = PropagateInfo False
+	propagateInfo _ = False
 
 poudriereConfigured :: PoudriereConfigured -> Bool
 poudriereConfigured (PoudriereConfigured _) = True
 
-setConfigured :: Property (HasInfo + FreeBSD)
-setConfigured = tightenTargets $
-	pureInfoProperty "Poudriere Configured" (PoudriereConfigured "")
+setConfigured :: Property HasInfo
+setConfigured = pureInfoProperty "Poudriere Configured" (PoudriereConfigured "")
 
-poudriere :: Poudriere -> Property (HasInfo + FreeBSD)
-poudriere conf@(Poudriere _ _ _ _ _ _ zfs) = prop
-	`requires` Pkg.installed "poudriere"
-	`before` setConfigured
-  where
-	confProp :: Property FreeBSD
-	confProp = tightenTargets $
-		File.containsLines poudriereConfigPath (toLines conf)
-	setZfs (PoudriereZFS z p) = ZFS.zfsSetProperties z p `describe` "Configuring Poudriere with ZFS"
-	prop :: Property FreeBSD
-	prop
-		| isJust zfs = ((setZfs $ fromJust zfs) `before` confProp)
-		| otherwise = confProp `describe` "Configuring Poudriere without ZFS"
+poudriere :: Poudriere -> Property HasInfo
+poudriere conf@(Poudriere _ _ _ _ _ _ zfs) =
+	let
+		confProp =
+			File.containsLines poudriereConfigPath (toLines conf)
+		setZfs (PoudriereZFS z p) = ZFS.zfsSetProperties z p `describe` "Configuring Poudriere with ZFS"
+		prop :: CombinedType (Property NoInfo) (Property NoInfo)
+		prop =
+			if isJust zfs
+				then ((setZfs $ fromJust zfs) `before` confProp)
+				else propertyList "Configuring Poudriere without ZFS" [confProp]
+	in
+		prop
+		`requires` Pkg.installed "poudriere"
+		`before` setConfigured
 
 poudriereCommand :: String -> [String] -> (String, [String])
 poudriereCommand cmd args = ("poudriere", cmd:args)
@@ -55,27 +59,29 @@ runPoudriere cmd args =
 		lines <$> readProcess p a
 
 listJails :: IO [String]
-listJails = mapMaybe (headMaybe . take 1 . words)
-	<$> runPoudriere "jail" ["-l", "-q"]
+listJails = runPoudriere "jail" ["-l", "-q"]
 
 jailExists :: Jail -> IO Bool
 jailExists (Jail name _ _) = isInfixOf [name] <$> listJails
 
-jail :: Jail -> Property FreeBSD
-jail j@(Jail name version arch) = tightenTargets $
+jail :: Jail -> Property NoInfo
+jail j@(Jail name version arch) =
 	let
-		chk = do
-			c <- poudriereConfigured <$> askInfo
-			nx <- liftIO $ not <$> jailExists j
-			return $ c && nx
+		cfgd = poudriereConfigured <$> askInfo
 
-		(cmd, args) = poudriereCommand "jail"  ["-c", "-j", name, "-a", val arch, "-v", val version]
+		notExists :: IO Bool
+		notExists = not <$> jailExists j
+		chk = do
+			c <- cfgd
+			x <- liftIO notExists
+			return $ c && x
+
+		(cmd, args) = poudriereCommand "jail"  ["-c", "-j", name, "-a", show arch, "-v", show version]
 		createJail = cmdProperty cmd args
 	in
-		check chk createJail
-			`describe` unwords ["Create poudriere jail", name]
+		checkResult chk (\_ -> return MadeChange) createJail
+		`describe` unwords ["Create poudriere jail", name]
 
-data JailInfo = JailInfo String
 
 data Poudriere = Poudriere
 	{ _resolvConf :: String
@@ -84,8 +90,7 @@ data Poudriere = Poudriere
 	, _usePortLint :: Bool
 	, _distFilesCache :: FilePath
 	, _svnHost :: String
-	, _zfs :: Maybe PoudriereZFS
-	}
+	, _zfs :: Maybe PoudriereZFS}
 
 defaultConfig :: Poudriere
 defaultConfig = Poudriere
@@ -102,35 +107,32 @@ data PoudriereZFS = PoudriereZFS ZFS.ZFS ZFS.ZFSProperties
 data Jail = Jail String FBSDVersion PoudriereArch
 
 data PoudriereArch = I386 | AMD64 deriving (Eq)
+instance Show PoudriereArch where
+	show I386 = "i386"
+	show AMD64 = "amd64"
 
-instance ConfigurableValue PoudriereArch where
-	val I386 = "i386"
-	val AMD64 = "amd64"
-
-fromArchitecture :: Architecture -> PoudriereArch
-fromArchitecture X86_64 = AMD64
-fromArchitecture X86_32 = I386
-fromArchitecture _ = error "Not a valid Poudriere architecture."
+instance IsString PoudriereArch where
+	fromString "i386" = I386
+	fromString "amd64" = AMD64
+	fromString _ = error "Not a valid Poudriere architecture."
 
 yesNoProp :: Bool -> String
 yesNoProp b = if b then "yes" else "no"
 
 instance ToShellConfigLines Poudriere where
 	toAssoc c = map (\(k, f) -> (k, f c))
-		[ ("RESOLV_CONF", _resolvConf)
-		, ("FREEBSD_HOST", _freebsdHost)
-		, ("BASEFS", _baseFs)
-		, ("USE_PORTLINT", yesNoProp . _usePortLint)
-		, ("DISTFILES_CACHE", _distFilesCache)
-		, ("SVN_HOST", _svnHost)
-		] ++ maybe [ ("NO_ZFS", "yes") ] toAssoc (_zfs c)
+		[("RESOLV_CONF", _resolvConf)
+		,("FREEBSD_HOST", _freebsdHost)
+		,("BASEFS", _baseFs)
+		,("USE_PORTLINT", yesNoProp . _usePortLint)
+		,("DISTFILES_CACHE", _distFilesCache)
+		,("SVN_HOST", _svnHost)] ++ maybe [("NO_ZFS", "yes")] toAssoc (_zfs c)
 
 instance ToShellConfigLines PoudriereZFS where
 	toAssoc (PoudriereZFS (ZFS.ZFS (ZFS.ZPool pool) dataset) _) =
-		[ ("NO_ZFS", "no")
+		[("NO_ZFS", "no")
 		, ("ZPOOL", pool)
-		, ("ZROOTFS", val dataset)
-		]
+		, ("ZROOTFS", show dataset)]
 
 type ConfigLine = String
 type ConfigFile = [ConfigLine]
@@ -139,7 +141,7 @@ class ToShellConfigLines a where
 	toAssoc :: a -> [(String, String)]
 
 	toLines :: a -> [ConfigLine]
-	toLines c = map (\(k, v) -> intercalate "=" [k, v]) (toAssoc c)
+	toLines c = map (\(k, v) -> intercalate "=" [k, v]) $ toAssoc c
 
 confFile :: FilePath
 confFile = "/usr/local/etc/poudriere.conf"

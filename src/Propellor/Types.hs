@@ -28,6 +28,8 @@ module Propellor.Types (
 	, module Propellor.Types.Dns
 	, module Propellor.Types.Result
 	, module Propellor.Types.ZFS
+	, propertySatisfy
+	, ignoreInfo
 	) where
 
 import Data.Monoid
@@ -43,6 +45,7 @@ import Propellor.Types.OS
 import Propellor.Types.ConfigurableValue
 import Propellor.Types.Dns
 import Propellor.Types.Result
+import Propellor.Types.ZFS
 
 -- | Everything Propellor knows about a system: Its hostname,
 -- properties and their collected info.
@@ -124,7 +127,7 @@ type instance CInfo NoInfo HasInfo = HasInfo
 type instance CInfo NoInfo NoInfo = NoInfo
 
 -- | Constructs a Property with associated Info.
-infoProperty 
+infoProperty
 	:: Desc -- ^ description of the property
 	-> Propellor Result -- ^ action to run to satisfy the property (must be idempotent; may run repeatedly)
 	-> Info -- ^ info associated with the property
@@ -156,7 +159,7 @@ propertySatisfy :: Property i -> Propellor Result
 propertySatisfy (IProperty _ a _ _) = a
 propertySatisfy (SProperty _ a _) = a
 
--- | Changes the action that is performed to satisfy a property. 
+-- | Changes the action that is performed to satisfy a property.
 adjustPropertySatisfy :: Property i -> (Propellor Result -> Propellor Result) -> Property i
 adjustPropertySatisfy (IProperty d s i cs) f = IProperty d (f s) i cs
 adjustPropertySatisfy (SProperty d s cs) f = SProperty d (f s) cs
@@ -169,7 +172,7 @@ propertyDesc (IProperty d _ _ _) = d
 propertyDesc (SProperty d _ _) = d
 
 instance Show (Property i) where
-        show p = "property " ++ show (propertyDesc p)
+	show p = "property " ++ show (propertyDesc p)
 
 -- | A Property can include a list of child properties that it also
 -- satisfies. This allows them to be introspected to collect their info, etc.
@@ -185,7 +188,7 @@ data RevertableProperty i = RevertableProperty
 	}
 
 instance Show (RevertableProperty i) where
-        show (RevertableProperty p _) = show p
+	show (RevertableProperty p _) = show p
 
 class MkRevertableProperty i1 i2 where
 	-- | Shorthand to construct a revertable property.
@@ -213,7 +216,7 @@ instance IsProp (Property HasInfo) where
 	setDesc (IProperty _ a i cs) d = IProperty d a i cs
 	toProp = id
 	getDesc = propertyDesc
-	getInfoRecursive (IProperty _ _ i cs) = 
+	getInfoRecursive (IProperty _ _ i cs) =
 		i <> mconcat (map getInfoRecursive cs)
 instance IsProp (Property NoInfo) where
 	setDesc (SProperty _ a cs) d = SProperty d a cs
@@ -255,8 +258,8 @@ type ResultCombiner = Propellor Result -> Propellor Result -> Propellor Result
 class Combines x y where
 	-- | Combines together two properties, yielding a property that
 	-- has the description and info of the first, and that has the second
-	-- property as a child. 
-	combineWith 
+	-- property as a child.
+	combineWith
 		:: ResultCombiner
 		-- ^ How to combine the actions to satisfy the properties.
 		-> ResultCombiner
@@ -307,7 +310,7 @@ instance Combines (Property HasInfo) (RevertableProperty HasInfo) where
 instance Combines (Property NoInfo) (RevertableProperty HasInfo) where
 	combineWith = combineWithPR
 
-combineWithRR 
+combineWithRR
 	:: Combines (Property x) (Property y)
 	=> ResultCombiner
 	-> ResultCombiner

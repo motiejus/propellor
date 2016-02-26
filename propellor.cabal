@@ -95,7 +95,6 @@ Library
     Propellor.Property.FreeBSD
     Propellor.Property.FreeBSD.Pkg
     Propellor.Property.FreeBSD.Poudriere
-    Propellor.Property.Fstab
     Propellor.Property.Git
     Propellor.Property.Gpg
     Propellor.Property.Group
@@ -172,6 +171,7 @@ Library
     Propellor.Types.Result
     Propellor.Types.ResultCheck
     Propellor.Types.CmdLine
+    Propellor.Types.ZFS
   Other-Modules:
     Propellor.Bootstrap
     Propellor.Git
