@@ -225,8 +225,7 @@ preserveRootSshAuthorized :: Property UnixLike
 preserveRootSshAuthorized = check (fileExist oldloc) $
 	property' desc $ \w -> do
 		ks <- liftIO $ lines <$> readFile oldloc
-		ensureProperty w $ combineProperties desc $
-			toProps $ map (setupRevertableProperty . Ssh.authorizedKey (User "root")) ks
+		ensureProperties (map (setupRevertableProperty . Ssh.authorizedKey (User "root")) ks)
   where
 	desc = newloc ++ " copied from old OS"
 	newloc = "/root/.ssh/authorized_keys"
