@@ -11,6 +11,7 @@ module Propellor.Property.Firewall (
 	Proto(..),
 	Rules(..),
 	ConnectionState(..),
+	ICMPTypeMatch(..),
 	IPWithMask(..),
 	fromIPWithMask
 ) where
@@ -57,6 +58,11 @@ toIpTableArg (Ctstate states) =
 	[ "-m"
 	, "conntrack"
 	, "--ctstate", intercalate "," (map show states)
+	]
+toIpTableArg (ICMPType i) =
+	[ "-m"
+	, "icmp"
+	, "--icmp-type", fromICMPTypeMatch i
 	]
 toIpTableArg (Source ipwm) =
 	[ "-s"
@@ -167,22 +173,9 @@ data ConnectionState = ESTABLISHED | RELATED | NEW | INVALID
 data ICMPTypeMatch = ICMPTypeName String | ICMPTypeCode Int
 	deriving (Eq, Show)
 
-instance ConfigurableValue ICMPTypeMatch where
-	val (ICMPTypeName t) = t
-	val (ICMPTypeCode c) = val c
-
-data Frequency = NumBySecond Int
-	deriving (Eq, Show)
-
-instance ConfigurableValue Frequency where
-	val (NumBySecond n) = val n ++ "/second"
-
-type TCPFlagMask = [TCPFlag]
-
-type TCPFlagComp = [TCPFlag]
-
-data TCPFlag = SYN | ACK | FIN | RST | URG | PSH | ALL | NONE
-	deriving (Eq, Show)
+fromICMPTypeMatch :: ICMPTypeMatch -> String
+fromICMPTypeMatch (ICMPTypeName t) = t
+fromICMPTypeMatch (ICMPTypeCode c) = show c
 
 data Rules
 	= Everything
@@ -194,6 +187,7 @@ data Rules
 	| InIFace Network.Interface
 	| OutIFace Network.Interface
 	| Ctstate [ ConnectionState ]
+	| ICMPType ICMPTypeMatch
 	| Source [ IPWithMask ]
 	| Destination [ IPWithMask ]
 	| Rules :- Rules   -- ^Combine two rules
