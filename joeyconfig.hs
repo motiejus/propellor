@@ -187,13 +187,13 @@ orca = host "orca.kitenet.net" $ props
 
 	& Systemd.nspawned (GitAnnexBuilder.autoBuilderContainer
 		GitAnnexBuilder.standardAutoBuilder
-		Unstable X86_64 Nothing (Cron.Times "15 * * * *") "2h")
+		(System (Debian Unstable) "amd64") Nothing (Cron.Times "15 * * * *") "2h")
 	& Systemd.nspawned (GitAnnexBuilder.autoBuilderContainer
 		GitAnnexBuilder.standardAutoBuilder
-		Unstable X86_32 Nothing (Cron.Times "30 * * * *") "2h")
+		(System (Debian Unstable) "i386") Nothing (Cron.Times "30 * * * *") "2h")
 	& Systemd.nspawned (GitAnnexBuilder.autoBuilderContainer
-		GitAnnexBuilder.stackAutoBuilder
-		(Stable "jessie") X86_32 (Just "ancient") (Cron.Times "45 * * * *") "2h")
+		GitAnnexBuilder.standardAutoBuilder
+		(System (Debian (Stable "jessie")) "i386") (Just "ancient") (Cron.Times "45 * * * *") "2h")
 	& Systemd.nspawned (GitAnnexBuilder.androidAutoBuilderContainer
 		(Cron.Times "1 1 * * *") "3h")
 
