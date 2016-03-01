@@ -230,8 +230,8 @@ type Package = String
 installed :: [Package] -> Property DebianLike
 installed = installed' ["-y"]
 
-installed' :: [String] -> [Package] -> Property DebianLike
-installed' params ps = robustly $ check (not <$> isInstalled' ps) go
+installed' :: [String] -> [Package] -> Property NoInfo
+installed' params ps = robustly $ check (isInstallable ps) go
 	`describe` unwords ("apt installed":ps)
   where
 	go = runApt (params ++ ["install"] ++ ps)
@@ -247,6 +247,7 @@ installedBackport ps = withOS desc $ \o -> case o of
 	_ -> notsupported o
   where
 	desc = unwords ("apt installed backport":ps)
+	notsupported o = error $ "backports not supported on " ++ show o
 
 -- | Minimal install of package, without recommends.
 installedMin :: [Package] -> Property DebianLike
@@ -254,12 +255,12 @@ installedMin = installed' ["--no-install-recommends", "-y"]
 
 removed :: [Package] -> Property NoInfo
 removed ps = check (or <$> isInstalled' ps) (runApt (["-y", "remove"] ++ ps))
-	`describe` (unwords $ "apt removed":ps)
+	`describe` unwords ("apt removed":ps)
 
 buildDep :: [Package] -> Property NoInfo
 buildDep ps = robustly $ go
 	`changesFile` dpkgStatus
-	`describe` (unwords $ "apt build-dep":ps)
+	`describe` unwords ("apt build-dep":ps)
   where
 	go = runApt $ ["-y", "build-dep"] ++ ps
 
@@ -421,7 +422,7 @@ hasForeignArch :: String -> Property NoInfo
 hasForeignArch arch = check notAdded (add `before` update)
 	`describe` ("dpkg has foreign architecture " ++ arch)
   where
-	notAdded = (not . elem arch . lines) <$> readProcess "dpkg" ["--print-foreign-architectures"]
+	notAdded = (notElem arch . lines) <$> readProcess "dpkg" ["--print-foreign-architectures"]
 	add = cmdProperty "dpkg" ["--add-architecture", arch]
 		`assume` MadeChange
 
