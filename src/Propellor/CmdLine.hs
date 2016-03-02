@@ -116,26 +116,25 @@ defaultMain hostlist = withConcurrentOutput $ do
 	go _ (DockerChain hn cid) = Docker.chain hostlist hn cid
 	go _ (DockerInit hn) = Docker.init hn
 	go _ (GitPush fin fout) = gitPushHelper fin fout
-	go cr (Relay h) = forceConsole >>
-		updateFirst Nothing cr (Update (Just h)) (update (Just h))
-	go _ (Update Nothing) = forceConsole >>
-		fetchFirst (onlyprocess (update Nothing))
+	go cr (Relay h) = forceConsole >> updateFirst cr (Update (Just h)) (update (Just h))
+	go _ (Update Nothing) = forceConsole >> fetchFirst (onlyprocess (update Nothing))
 	go _ (Update (Just h)) = update (Just h)
 	go _ Merge = mergeSpin
-	go True cmdline@(Spin _ _) = buildFirst cmdline $ go False cmdline
-	go True cmdline = updateFirst cmdline $ go False cmdline
-	go False (Spin hs mrelay) = do
+	go cr cmdline@(Spin hs mrelay) = buildFirst cr cmdline $ do
 		unless (isJust mrelay) commitSpin
 		forM_ hs $ \hn -> withhost hn $ spin mrelay hn
-	go False cmdline@(SimpleRun hn) = do
-		forceConsole
-		buildFirst cmdline $ go False (Run hn)
-	go False (Run hn) = ifM ((==) 0 <$> getRealUserID)
-		( onlyprocess $ withhost hn mainProperties
-		, go True (Spin [hn] Nothing)
-		)
-	go cr cmdline@(SimpleRun hn) = forceConsole >>
-		fetchFirst (buildFirst (findHost hostlist hn) cr cmdline (runhost hn))
+	go cr (Run hn) = fetchFirst $
+		ifM ((==) 0 <$> getRealUserID)
+			( onlyprocess $ withhost hn mainProperties
+			, go cr (Spin [hn] Nothing)
+			)
+	go cr (SimpleRun hn) = go cr (Run hn)
+	go cr (Continue cmdline@(SimpleRun _)) =
+		-- --continue SimpleRun is used by --spin,
+		-- and unlike all other uses of --continue, this legacy one
+		-- wants an update first (to get any changes from the
+		-- central git repo)
+		forceConsole >> updateFirst cr cmdline (go NoRebuild cmdline)
 	-- When continuing after a rebuild, don't want to rebuild again.
 	go _ (Continue cmdline) = go NoRebuild cmdline
 
@@ -154,14 +153,8 @@ unknownhost h hosts = errorMessage $ unlines
 	, "Known hosts: " ++ unwords (map hostName hosts)
 	]
 
--- Builds propellor (when allowed) and if it looks like a new binary,
--- re-execs it to continue.
--- Otherwise, runs the IO action to continue.
---
--- The Host should only be provided when dependencies should be installed
--- as needed to build propellor.
-buildFirst :: Maybe Host -> CanRebuild -> CmdLine -> IO () -> IO ()
-buildFirst h CanRebuild cmdline next = do
+buildFirst :: CanRebuild -> CmdLine -> IO () -> IO ()
+buildFirst CanRebuild cmdline next = do
 	oldtime <- getmtime
 	buildPropellor h
 	newtime <- getmtime
@@ -170,16 +163,7 @@ buildFirst h CanRebuild cmdline next = do
 		else continueAfterBuild cmdline
   where
 	getmtime = catchMaybeIO $ getModificationTime "propellor"
-buildFirst _ NoRebuild _ next = next
-
-continueAfterBuild :: CmdLine -> IO a
-continueAfterBuild cmdline = go =<< boolSystem "./propellor"
-	[ Param "--continue"
-	, Param (show cmdline)
-	]
-  where
-	go True = exitSuccess
-	go False = exitWith (ExitFailure 1)
+buildFirst NoRebuild _ next = next
 
 fetchFirst :: IO () -> IO ()
 fetchFirst next = do
@@ -187,23 +171,20 @@ fetchFirst next = do
 		void fetchOrigin
 	next
 
-updateFirst :: Maybe Host -> CanRebuild -> CmdLine -> IO () -> IO ()
-updateFirst h canrebuild cmdline next = ifM hasOrigin
-	( updateFirst' h canrebuild cmdline next
+updateFirst :: CanRebuild -> CmdLine -> IO () -> IO ()
+updateFirst canrebuild cmdline next = ifM hasOrigin
+	( updateFirst' canrebuild cmdline next
 	, next
 	)
 
--- If changes can be fetched from origin,  Builds propellor (when allowed)
--- and re-execs the updated propellor binary to continue.
--- Otherwise, runs the IO action to continue.
-updateFirst' :: Maybe Host -> CanRebuild -> CmdLine -> IO () -> IO ()
-updateFirst' h CanRebuild cmdline next = ifM fetchOrigin
+updateFirst' :: CanRebuild -> CmdLine -> IO () -> IO ()
+updateFirst' CanRebuild cmdline next = ifM fetchOrigin
 	( do
 		buildPropellor h
 		continueAfterBuild cmdline
 	, next
 	)
-updateFirst' _ NoRebuild _ next = next
+updateFirst' NoRebuild _ next = next
 
 -- Gets the fully qualified domain name, given a string that might be
 -- a short name to look up in the DNS.
