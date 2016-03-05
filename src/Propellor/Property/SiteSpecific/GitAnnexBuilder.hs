@@ -109,7 +109,6 @@ autoBuilderContainer :: (System -> Flavor -> Property HasInfo) -> System -> Flav
 autoBuilderContainer mkprop osver@(System _ arch) flavor crontime timeout =
 	Systemd.container name osver (Chroot.debootstrapped mempty)
 		& mkprop osver flavor
-		& buildDepsApt
 		& autobuilder arch crontime timeout
   where
 	name = arch ++ fromMaybe "" flavor ++ "-git-annex-builder"
@@ -119,13 +118,49 @@ type Flavor = Maybe String
 standardAutoBuilder :: DebianSuite -> Architecture -> Flavor -> Property (HasInfo + Debian)
 standardAutoBuilder suite arch flavor =
 	propertyList "standard git-annex autobuilder" $ props
-		& osDebian suite arch
+		& os osver
 		& buildDepsApt
 		& Apt.stdSourcesList
 		& Apt.unattendedUpgrades
 		& Apt.cacheCleaned
 		& User.accountFor (User builduser)
-		& tree (architectureToDebianArchString arch) flavor
+		& tree arch flavor
+
+stackAutoBuilder :: System -> Flavor -> Property HasInfo
+stackAutoBuilder osver@(System _ arch) flavor =
+	propertyList "git-annex autobuilder using stack" $ props
+		& os osver
+		& buildDepsNoHaskellLibs
+		& Apt.stdSourcesList
+		& Apt.unattendedUpgrades
+		& Apt.cacheCleaned
+		& User.accountFor (User builduser)
+		& tree arch flavor
+		& stackInstalled
+
+stackInstalled :: Property NoInfo
+stackInstalled = withOS "stack installed" $ \o ->
+	case o of
+		(Just (System (Debian (Stable "jessie")) "i386")) ->
+			ensureProperty $ manualinstall "i386"
+		_ -> ensureProperty $ Apt.installed ["haskell-stack"]
+  where
+	-- Warning: Using a binary downloaded w/o validation.
+	manualinstall arch = check (not <$> doesFileExist binstack) $
+		propertyList "stack installed from upstream tarball"
+			[ cmdProperty "wget" ["https://www.stackage.org/stack/linux-" ++ arch, "-O", tmptar]
+				`assume` MadeChange
+			, File.dirExists tmpdir
+			, cmdProperty "tar" ["xf", tmptar, "-C", tmpdir, "--strip-components=1"]
+				`assume` MadeChange
+			, cmdProperty "mv" [tmpdir </> "stack", binstack]
+				`assume` MadeChange
+			, cmdProperty "rm" ["-rf", tmpdir, tmptar]
+				`assume` MadeChange
+			]
+	binstack = "/usr/bin/stack"
+	tmptar = "/root/stack.tar.gz"
+	tmpdir = "/root/stack"
 
 stackAutoBuilder :: DebianSuite -> Architecture -> Flavor -> Property (HasInfo + Debian)
 stackAutoBuilder suite arch flavor =
