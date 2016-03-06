@@ -125,6 +125,30 @@ notPresent :: FilePath -> Property UnixLike
 notPresent f = check (doesFileExist f) $ property (f ++ " not present") $ 
 	makeChange $ nukeFile f
 
+fileProperty :: Desc -> ([Line] -> [Line]) -> FilePath -> Property NoInfo
+fileProperty = fileProperty' writeFile
+fileProperty' :: (FilePath -> String -> IO ()) -> Desc -> ([Line] -> [Line]) -> FilePath -> Property NoInfo
+fileProperty' writer desc a f = property desc $ go =<< liftIO (doesFileExist f)
+  where
+	go True = do
+		old <- liftIO $ readFile f
+		let new = unlines (a (lines old))
+		if old == new
+			then noChange
+			else makeChange $ do
+				writeFile "/tmp/a" old
+				writeFile "/tmp/b" new
+				print ("MAKE CHANGE", f)
+				updatefile new `viaStableTmp` f
+	go False = makeChange $ writer f (unlines $ a [])
+
+	-- Replicate the original file's owner and mode.
+	updatefile content f' = do
+		writer f' content
+		s <- getFileStatus f
+		setFileMode f' (fileMode s)
+		setOwnerAndGroup f' (fileOwner s) (fileGroup s)
+
 -- | Ensures a directory exists.
 dirExists :: FilePath -> Property UnixLike
 dirExists d = check (not <$> doesDirectoryExist d) $ property (d ++ " exists") $
