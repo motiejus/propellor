@@ -45,8 +45,8 @@ main = defaultMain hosts --  /   \___-=O`/|O`/__|                      (____.'
   {- Propellor            -- \          / | /    )          _.-"-._
      Deployed -}          --  `/-==__ _/__|/__=-|          (       \_
 hosts :: [Host]          --   *             \ | |           '--------'
-hosts =                 --                  (o)  `
-	[ darkstar
+hosts =                --                  (o)  `
+	[ darkstar 
 	, gnu
 	, clam
 	, mayfly
