@@ -94,7 +94,7 @@ data CanRebuild = CanRebuild | NoRebuild
 
 -- | Runs propellor on hosts, as controlled by command-line options.
 defaultMain :: [Host] -> IO ()
-defaultMain hostlist = withConcurrentOutput $ do
+defaultMain hostlist = do
 	Shim.cleanEnv
 	checkDebugMode
 	cmdline <- processCmdLine
