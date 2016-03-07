@@ -4,8 +4,6 @@ import System.IO
 import Data.Maybe
 import Data.List.Utils
 import Control.Monad
-import System.Console.Concurrent
-import System.Console.Concurrent.Internal (ConcurrentProcessHandle(..))
 import Control.Applicative
 import Prelude
 
@@ -171,12 +169,7 @@ gitCommit msg ps = do
 	let ps' = Param "commit" : ps ++
 		maybe [] (\m -> [Param "-m", Param m]) msg
 	ps'' <- gpgSignParams ps'
-	if isNothing msg
-		then do
-			(_, _, _, ConcurrentProcessHandle p) <- createProcessForeground $
-				proc "git" (toCommand ps'')
-			checkSuccessProcess p
-		else boolSystem "git" ps''
+	boolSystemNonConcurrent "git" ps''
 
 gpgDecrypt :: FilePath -> IO String
 gpgDecrypt f = do

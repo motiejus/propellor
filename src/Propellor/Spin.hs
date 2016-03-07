@@ -32,8 +32,7 @@ import Propellor.Types.Info
 import qualified Propellor.Shim as Shim
 import Utility.FileMode
 import Utility.SafeCommand
-
-import System.Console.Concurrent
+import Utility.Process.NonConcurrent
 
 commitSpin :: IO ()
 commitSpin = do
@@ -85,10 +84,9 @@ spin' mprivdata relay target hst = do
 		(proc "ssh" $ cacheparams ++ [sshtarget, shellWrap probecmd])
 		(proc "ssh" $ cacheparams ++ [sshtarget, shellWrap updatecmd])
 		=<< getprivdata
-	async $ createProcessForeground $ proc "sleep" ["500"]
 
 	-- And now we can run it.
-	unlessM (boolSystem "ssh" (map Param $ cacheparams ++ ["-t", sshtarget, shellWrap runcmd])) $
+	unlessM (boolSystemNonConcurrent "ssh" (map Param $ cacheparams ++ ["-t", sshtarget, shellWrap runcmd])) $
 		error "remote propellor failed"
   where
 	hn = fromMaybe target relay
@@ -217,8 +215,13 @@ updateServer
 	-> CreateProcess
 	-> PrivMap
 	-> IO ()
-updateServer target relay hst connect haveprecompiled privdata =
-	withIOHandles createProcessSuccess connect go
+updateServer target relay hst connect haveprecompiled privdata = do
+	(Just toh, Just fromh, _, pid) <- createProcessNonConcurrent $ connect
+		{ std_in = CreatePipe
+		, std_out = CreatePipe
+		}
+	go (toh, fromh)
+	forceSuccessProcess' connect =<< waitForProcessNonConcurrent pid
   where
 	hn = fromMaybe target relay
 

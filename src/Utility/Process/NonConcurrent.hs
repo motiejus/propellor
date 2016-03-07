@@ -16,8 +16,6 @@ import System.Process
 import System.Exit
 import System.IO
 import Utility.SafeCommand
-import Control.Applicative
-import Prelude
 
 boolSystemNonConcurrent :: String -> [CommandParam] -> IO Bool
 boolSystemNonConcurrent cmd params = do
