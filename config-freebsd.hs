@@ -1,7 +1,7 @@
 -- This is the main configuration file for Propellor, and is used to build
 -- the propellor program.
 --
--- This shows how to set up a FreeBSD host (and a Linux host too).
+-- This shows how to as a FreeBSD, as well as a Linux host.
 
 import Propellor
 import qualified Propellor.Property.File as File
@@ -14,6 +14,7 @@ import qualified Propellor.Property.Docker as Docker
 import qualified Propellor.Property.FreeBSD.Pkg as Pkg
 import qualified Propellor.Property.ZFS as ZFS
 import qualified Propellor.Property.FreeBSD.Poudriere as Poudriere
+import Data.String (fromString)
 
 main :: IO ()
 main = defaultMain hosts
@@ -21,30 +22,14 @@ main = defaultMain hosts
 -- The hosts propellor knows about.
 hosts :: [Host]
 hosts =
-	[ freebsdbox
-	, linuxbox
+	[ mybox
+	, freebsd
 	]
 
--- An example freebsd host.
-freebsdbox :: Host
-freebsdbox = host "freebsdbox.example.com" $ props
-	& osFreeBSD (FBSDProduction FBSD102) X86_64
-	& Pkg.update
-	& Pkg.upgrade
-	& Poudriere.poudriere poudriereZFS
-	& Poudriere.jail (Poudriere.Jail "formail" (fromString "10.2-RELEASE") (fromArchitecture X86_64))
-
-poudriereZFS :: Poudriere.Poudriere
-poudriereZFS = Poudriere.defaultConfig
-	{ Poudriere._zfs = Just $ Poudriere.PoudriereZFS
-		(ZFS.ZFS (fromString "zroot") (fromString "poudriere"))
-		(ZFS.fromList [ZFS.Mountpoint (fromString "/poudriere"), ZFS.ACLInherit ZFS.AIPassthrough])
-	}
-
 -- An example linux host.
-linuxbox :: Host
-linuxbox = host "linuxbox.example.com" $ props
-	& osDebian' KFreeBSD Unstable X86_64
+mybox :: Host
+mybox = host "mybox.example.com"
+	& os (System (Debian Unstable) "amd64")
 	& Apt.stdSourcesList
 	& Apt.unattendedUpgrades
 	& Apt.installed ["etckeeper"]
@@ -58,9 +43,25 @@ linuxbox = host "linuxbox.example.com" $ props
 
 -- A generic webserver in a Docker container.
 webserverContainer :: Docker.Container
-webserverContainer = Docker.container "webserver" (Docker.latestImage "debian") $ props
-	& osDebian' KFreeBSD (Stable "jessie") X86_64
+webserverContainer = Docker.container "webserver" (Docker.latestImage "debian")
+	& os (System (Debian (Stable "jessie")) "amd64")
 	& Apt.stdSourcesList
 	& Docker.publish "80:80"
 	& Docker.volume "/var/www:/var/www"
 	& Apt.serviceInstalledRunning "apache2"
+
+-- An example freebsd host.
+freebsd :: Host
+freebsd = host "freebsd.example.com"
+	& os (System (FreeBSD (FBSDProduction FBSD102)) "amd64")
+	& Pkg.update
+	& Pkg.upgrade
+	& Poudriere.poudriere poudriereZFS
+	& Poudriere.jail (Poudriere.Jail "formail" (fromString "10.2-RELEASE") (fromString "amd64"))
+
+poudriereZFS :: Poudriere.Poudriere
+poudriereZFS = Poudriere.defaultConfig
+	{ Poudriere._zfs = Just $ Poudriere.PoudriereZFS
+		(ZFS.ZFS (fromString "zroot") (fromString "poudriere"))
+		(ZFS.fromList [ZFS.Mountpoint (fromString "/poudriere"), ZFS.ACLInherit ZFS.AIPassthrough])
+	}
