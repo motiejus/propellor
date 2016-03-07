@@ -16,11 +16,9 @@ Extra-Source-Files:
   CHANGELOG
   Makefile
   config-simple.hs
-  config-freebsd.hs
-  config-joey.hs
+  joeyconfig.hs
   config.hs
-  contrib/post-merge-hook
-  stack.yaml
+  contrib/post-checkout-hook
   debian/changelog
   debian/propellor.README.Debian
   debian/compat
