@@ -137,7 +137,7 @@ logind = "systemd-logind"
 
 -- | Enables persistent storage of the journal.
 persistentJournal :: Property NoInfo
-persistentJournal = check (not <$> doesDirectoryExist dir) $ 
+persistentJournal = check (not <$> doesDirectoryExist dir) $
 	combineProperties "persistent systemd journal"
 		[ cmdProperty "install" ["-d", "-g", "systemd-journal", dir]
 			`assume` MadeChange
@@ -257,9 +257,8 @@ nspawned c@(Container name (Chroot.Chroot loc builder _) h) =
 
 	-- Use nsenter to enter container and and run propellor to
 	-- finish provisioning.
-	containerprovisioned :: RevertableProperty Linux Linux
 	containerprovisioned =
-		tightenTargets (Chroot.propellChroot chroot (enterContainerProcess c) False)
+		Chroot.propellChroot chroot (enterContainerProcess c) False
 			<!>
 		doNothing
 
@@ -402,7 +401,7 @@ class Publishable a where
 	toPublish :: a -> String
 
 instance Publishable Port where
-	toPublish port = val port
+	toPublish port = fromPort port
 
 instance Publishable (Bound Port) where
 	toPublish v = toPublish (hostSide v) ++ ":" ++ toPublish (containerSide v)

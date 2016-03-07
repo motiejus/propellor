@@ -18,7 +18,7 @@ module Propellor.Types.OS (
 	Group(..),
 	userGroup,
 	Port(..),
-	systemToTargetOS,
+	fromPort,
 ) where
 
 import Propellor.Types.ConfigurableValue
@@ -126,7 +126,7 @@ userGroup :: User -> Group
 userGroup (User u) = Group u
 
 newtype Port = Port Int
-	deriving (Eq, Ord, Show)
+	deriving (Eq, Show)
 
-instance ConfigurableValue Port where
-	val (Port p) = show p
+fromPort :: Port -> String
+fromPort (Port p) = show p

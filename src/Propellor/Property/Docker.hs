@@ -79,7 +79,7 @@ configured = prop `requires` installed
   where
 	prop :: Property (HasInfo + DebianLike)
 	prop = withPrivData src anyContext $ \getcfg ->
-		property' "docker configured" $ \w -> getcfg $ \cfg -> ensureProperty w $
+		property "docker configured" $ getcfg $ \cfg -> ensureProperty $
 			"/root/.dockercfg" `File.hasContent` privDataLines cfg
 	src = PrivDataSourceFileFromCommand DockerAuthentication
 		"/root/.dockercfg" "docker login"
@@ -243,7 +243,7 @@ tweaked = cmdProperty "sh"
 -- Only takes effect after reboot. (Not automated.)
 memoryLimited :: Property NoInfo
 memoryLimited = "/etc/default/grub" `File.containsLine` cfg
-	`describe` "docker memory limited" 
+	`describe` "docker memory limited"
 	`onChange` (cmdProperty "update-grub" [] `assume` MadeChange)
   where
 	cmdline = "cgroup_enable=memory swapaccount=1"
@@ -317,7 +317,7 @@ class Publishable p where
 	toPublish :: p -> String
 
 instance Publishable (Bound Port) where
-	toPublish p = val (hostSide p) ++ ":" ++ val (containerSide p)
+	toPublish p = fromPort (hostSide p) ++ ":" ++ fromPort (containerSide p)
 
 -- | string format: ip:hostPort:containerPort | ip::containerPort | hostPort:containerPort
 instance Publishable String where
@@ -358,7 +358,7 @@ volumes_from cn = genProp "volumes-from" $ \hn ->
 	fromContainerId (ContainerId hn cn)
 
 -- | Work dir inside the container.
-workdir :: String -> Property (HasInfo + Linux)
+workdir :: String -> Property HasInfo
 workdir = runProp "workdir"
 
 -- | Memory limit for container.
@@ -602,10 +602,11 @@ stopContainer cid = boolSystem dockercmd [Param "stop", Param $ fromContainerId 
 startContainer :: ContainerId -> IO Bool
 startContainer cid = boolSystem dockercmd [Param "start", Param $ fromContainerId cid ]
 
-stoppedContainer :: ContainerId -> Property Linux
-stoppedContainer cid = containerDesc cid $ property' desc $ \w ->
+stoppedContainer :: ContainerId -> Property NoInfo
+stoppedContainer cid = containerDesc cid $ property desc $
 	ifM (liftIO $ elem cid <$> listContainers RunningContainers)
-		( liftIO cleanup `after` ensureProperty w stop
+		( liftIO cleanup `after` ensureProperty
+			(property desc $ liftIO $ toResult <$> stopContainer cid)
 		, return NoChange
 		)
   where
