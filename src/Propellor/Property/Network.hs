@@ -100,13 +100,19 @@ interfacesFile :: FilePath
 interfacesFile = "/etc/network/interfaces"
 
 -- | A file in the interfaces.d directory.
-interfaceDFile :: Interface -> FilePath
-interfaceDFile i = "/etc/network/interfaces.d" </> escapeInterfaceDName i
-
--- | /etc/network/interfaces.d/ files have to match -- ^[a-zA-Z0-9_-]+$
+-- /etc/network/interfaces.d/ files have to match -- ^[a-zA-Z0-9_-]+$
 -- see "man 5 interfaces"
+interfaceDFile :: Interface -> FilePath
+interfaceDFile i = interfaceDFile' (escapeInterfaceDName i)
+
+interfaceDFile' :: Interface -> FilePath
+interfaceDFile' iface = "/etc/network/interfaces.d" </> iface
+
 escapeInterfaceDName :: Interface -> FilePath
-escapeInterfaceDName = filter (\c -> isAscii c && (isAlphaNum c || c `elem` "_-"))
+escapeInterfaceDName "" = ""
+escapeInterfaceDName (':' : xs) = escapeInterfaceDName xs
+escapeInterfaceDName ('.' : xs) = escapeInterfaceDName xs
+escapeInterfaceDName (x : xs) = x : escapeInterfaceDName xs
 
 -- | Ensures that files in the the interfaces.d directory are used.
 -- interfacesDEnabled :: Property DebianLike
