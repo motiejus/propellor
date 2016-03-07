@@ -1,6 +1,7 @@
 module Propellor.Gpg where
 
 import System.IO
+import System.Directory
 import Data.Maybe
 import Data.List.Utils
 import Control.Monad
@@ -28,43 +29,18 @@ getGpgBin = do
 		Nothing -> getEnvDefault "GNUPGBIN" "gpg"
 		Just b -> return b
 
-keyring :: FilePath
-keyring = privDataDir </> "keyring.gpg"
-
 -- Lists the keys in propellor's keyring.
 listPubKeys :: IO [KeyId]
 listPubKeys = do
 	gpgbin <- getGpgBin
-	parse . lines <$> readProcess gpgbin listopts
+	keyring <- privDataKeyring
+	parse . lines <$> readProcess gpgbin (listopts keyring)
   where
-	parse = mapMaybe (extract . split ":")
-	extract ("pub":_:_:_:f:_) = Just f
-	extract _ = Nothing
-
--- Lists all of the user's secret keys.
-listSecretKeys :: IO [(KeyId, String)]
-listSecretKeys = do
-	gpgbin <- getGpgBin
-	parse . lines <$> readProcess gpgbin
-		[ "--list-secret-keys"
-		, "--with-colons"
-		, "--fixed-list-mode"
-		]
-  where
-	parse = extract [] Nothing . map (split ":")
-	extract c (Just keyid) (("uid":_:_:_:_:_:_:_:_:userid:_):rest) =
-		extract ((keyid, userid):c) Nothing rest
-	extract c (Just keyid) rest@(("sec":_):_) =
-		extract ((keyid, ""):c) Nothing rest
-	extract c (Just keyid) rest@(("pub":_):_) =
-		extract ((keyid, ""):c) Nothing rest
-	extract c (Just keyid) (_:rest) =
-		extract c (Just keyid) rest
-	extract c _ [] = c
-	extract c _ (("sec":_:_:_:keyid:_):rest) =
-		extract c (Just keyid) rest
-	extract c k (_:rest) =
-		extract c k rest
+	listopts keyring = useKeyringOpts keyring ++
+		["--with-colons", "--list-public-keys"]
+	parse = mapMaybe (keyIdField . split ":")
+	keyIdField ("pub":_:_:_:f:_) = Just f
+	keyIdField _ = Nothing
 
 useKeyringOpts :: FilePath -> [String]
 useKeyringOpts keyring =
@@ -77,20 +53,21 @@ useKeyringOpts keyring =
 addKey :: KeyId -> IO ()
 addKey keyid = do
 	gpgbin <- getGpgBin
+	keyring <- privDataKeyring
 	exitBool =<< allM (uncurry actionMessage)
-		[ ("adding key to propellor's keyring", addkeyring gpgbin)
+		[ ("adding key to propellor's keyring", addkeyring keyring gpgbin)
 		, ("staging propellor's keyring", gitAdd keyring)
 		, ("updating encryption of any privdata", reencryptPrivData)
 		, ("configuring git commit signing to use key", gitconfig gpgbin)
 		, ("committing changes", gitCommitKeyRing "add-key")
 		]
   where
-	addkeyring gpgbin' = do
+	addkeyring keyring' gpgbin' = do
 		createDirectoryIfMissing True privDataDir
 		boolSystem "sh"
 			[ Param "-c"
 			, Param $ gpgbin' ++ " --export " ++ keyid ++ " | gpg " ++
-				unwords (useKeyringOpts ++ ["--import"])
+				unwords (useKeyringOpts keyring' ++ ["--import"])
 			]
 
 	gitconfig gpgbin' = ifM (snd <$> processTranscript gpgbin' ["--list-secret-keys", keyid] Nothing)
@@ -107,16 +84,17 @@ addKey keyid = do
 rmKey :: KeyId -> IO ()
 rmKey keyid = do
 	gpgbin <- getGpgBin
+	keyring <- privDataKeyring
 	exitBool =<< allM (uncurry actionMessage)
-		[ ("removing key from propellor's keyring", rmkeyring gpgbin)
+		[ ("removing key from propellor's keyring", rmkeyring keyring gpgbin)
 		, ("staging propellor's keyring", gitAdd keyring)
 		, ("updating encryption of any privdata", reencryptPrivData)
 		, ("configuring git commit signing to not use key", gitconfig)
 		, ("committing changes", gitCommitKeyRing "rm-key")
 		]
   where
-	rmkeyring gpgbin' = boolSystem gpgbin' $
-		(map Param useKeyringOpts) ++
+	rmkeyring keyring' gpgbin' = boolSystem gpgbin' $
+		(map Param (useKeyringOpts keyring')) ++
 		[ Param "--batch"
 		, Param "--yes"
 		, Param "--delete-key", Param keyid
@@ -132,12 +110,14 @@ rmKey keyid = do
 		)
 
 reencryptPrivData :: IO Bool
-reencryptPrivData = ifM (doesFileExist privDataFile)
-	( do
-		gpgEncrypt privDataFile =<< gpgDecrypt privDataFile
-		gitAdd privDataFile
-	, return True
-	)
+reencryptPrivData = do
+	f <- privDataFile
+	ifM (doesFileExist f)
+		( do
+			gpgEncrypt f =<< gpgDecrypt f
+			gitAdd f
+		, return True
+		)
 
 gitAdd :: FilePath -> IO Bool
 gitAdd f = boolSystem "git"
@@ -151,7 +131,7 @@ gitCommitKeyRing action = do
 	privdata <- privDataFile
 	-- Commit explicitly the keyring and privdata files, as other
 	-- changes may be staged by the user and shouldn't be committed.
-	tocommit <- filterM doesFileExist [ privDataFile, keyring]
+	tocommit <- filterM doesFileExist [ privdata, keyring]
 	gitCommit (Just ("propellor " ++ action)) (map File tocommit)
 
 -- Adds --gpg-sign if there's a keyring.
