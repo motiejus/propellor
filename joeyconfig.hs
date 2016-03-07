@@ -131,6 +131,12 @@ clam = host "clam.kitenet.net" $ props
 	& Tor.named "kite1"
 	& Tor.bandwidthRate (Tor.PerMonth "400 GB")
 
+	& Systemd.nspawned webserver
+	& File.dirExists "/var/www/html"
+	& File.notPresent "/var/www/index.html"
+	& "/var/www/html/index.html" `File.hasContent` ["hello, world"]
+	& alias "helloworld.kitenet.net"
+
 	& Systemd.nspawned oldusenetShellBox
 
 	& JoeySites.scrollBox
@@ -147,7 +153,7 @@ mayfly = standardSystem "mayfly.kitenet.net" (Stable "jessie") "amd64"
 	& Network.ipv6to4
 	& Systemd.persistentJournal
 	& Journald.systemMaxUse "500MiB"
-	
+
 	& Tor.isRelay
 	& Tor.named "kite3"
 	& Tor.bandwidthRate (Tor.PerMonth "400 GB")
@@ -169,11 +175,11 @@ oyster = standardSystem "oyster.kitenet.net" Unstable "amd64"
 	& Tor.isRelay
 	& Tor.named "kite2"
 	& Tor.bandwidthRate (Tor.PerMonth "400 GB")
-	
+
 	-- Nothing is using http port 80, so listen on
 	-- that port for ssh, for traveling on bad networks that
 	-- block 22.
-	& Ssh.listenPort 80
+	& Ssh.listenPort (Port 80)
 
 orca :: Host
 orca = host "orca.kitenet.net" $ props
@@ -198,8 +204,8 @@ orca = host "orca.kitenet.net" $ props
 		(Cron.Times "1 1 * * *") "3h")
 
 honeybee :: Host
-honeybee = host "honeybee.kitenet.net" $ props
-	& standardSystem Testing ARMHF [ "Arm git-annex build box." ]
+honeybee = standardSystem "honeybee.kitenet.net" Testing "armhf"
+	[ "Arm git-annex build box." ]
 
 	-- I have to travel to get console access, so no automatic
 	-- upgrades, and try to be robust.
@@ -297,6 +303,7 @@ kite = standardSystemUnhardened "kite.kitenet.net" Testing "amd64"
 	& alias "mail.kitenet.net"
 	& JoeySites.kiteMailServer
 
+	& JoeySites.kitenetHttps
 	& JoeySites.legacyWebSites
 	& File.ownerGroup "/srv/web" (User "joey") (Group "joey")
 	& Apt.installed ["analog"]
@@ -375,7 +382,7 @@ elephant = host "elephant.kitenet.net" $ props
 	& Systemd.persistentJournal
 	& Ssh.userKeys (User "joey") hostContext
 		[ (SshRsa, "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC4wJuQEGno+nJvtE75IKL6JQ08sJHZ9Bzs9Dvu0zuxSEZE30MWK98/twNwCH9PVf2N9m4apfN7f9GHgHTUongfo8xnLAk4PuBSTV74YgKyOCvNYqANuKKa+76PsS/vFf/or3ct++uTEWsRyYD29cQndufwKA4rthAqHG+fifbLDC53AjcldI0zI1RckpPzT+AMazlnSBFMlpKvGD2uzSXALVRXa3vSqWkWd0z7qmIkpmpq0AAgbDLwrGBcUGV/h0rOa2s8zSeirA0tLmHNROl4cZsX0T/6VBGfBRkrHSxL67xJziATw4WPq6spYlxg84pC/5qJVr9SC5HosppbDqgj joey@elephant")
-		] 
+		]
 	& Apt.serviceInstalledRunning "swapspace"
 
 	& alias "eubackup.kitenet.net"
@@ -624,7 +631,7 @@ monsters :: [Host]    -- Systems I don't manage with propellor,
 monsters =            -- but do want to track their public keys etc.
 	[ host "usw-s002.rsync.net"
 		& Ssh.hostPubKey SshEd25519 "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB7yTEBGfQYdwG/oeL+U9XPMIh/dW7XNs9T+M79YIOrd"
-	, host "github.com" 
+	, host "github.com"
 		& Ssh.hostPubKey SshRsa "ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ=="
 	, host "gitlab.com"
 		& Ssh.hostPubKey SshEcdsa "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBFSMqzJeV9rUzU4kWitGjeR4PWSa29SPqJ1fVkhtj3Hw9xjLVXVYrU9QlYWrOLXBpQ6KWjbjTDTdDkoohFzgbEY="
