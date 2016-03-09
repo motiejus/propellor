@@ -149,14 +149,13 @@ build msys = catchBoolIO $ do
 
 -- For speed, only runs cabal configure when it's not been run before.
 -- If the build fails cabal may need to have configure re-run.
---
--- If the cabal configure fails, and a System is provided, installs
--- dependencies and retries.
-cabalBuild :: Maybe System -> IO Bool
-cabalBuild msys = do
-	make "dist/setup-config" ["propellor.cabal"] cabal_configure
-	unlessM cabal_build $
-		unlessM (cabal_configure <&&> cabal_build) $
+build :: IO Bool
+build = catchBoolIO $ do
+	make "dist/setup-config" ["propellor.cabal"] $
+		cabal ["configure"]
+	unlessM (cabal ["build", "propellor-config"]) $ do
+		void $ cabal ["configure"]
+		unlessM (cabal ["build"]) $
 			error "cabal build failed"
 	-- For safety against eg power loss in the middle of the build,
 	-- make a copy of the binary, and move it into place atomically.
