@@ -53,22 +53,14 @@ named n = configured [("Nickname", n')]
   where
 	n' = saneNickname n
 
--- | Configures tor with secret_id_key, ed25519_master_id_public_key,
--- and ed25519_master_id_secret_key from privdata.
-torPrivKey :: Context -> Property (HasInfo + DebianLike)
-torPrivKey context = mconcat (map go keyfiles)
-	`onChange` restarted
+torPrivKey :: Context -> Property HasInfo
+torPrivKey context = f `File.hasPrivContent` context
+	`onChange` File.ownerGroup f user (userGroup user)
 	`requires` torPrivKeyDirExists
   where
-	keyfiles = map (torPrivKeyDir </>)
-		[ "secret_id_key"
-		, "ed25519_master_id_public_key"
-		, "ed25519_master_id_secret_key"
-		]
-	go f = f `File.hasPrivContent` context
-		`onChange` File.ownerGroup f user (userGroup user)
+	f = torPrivKeyDir </> "secret_id_key"
 
-torPrivKeyDirExists :: Property DebianLike
+torPrivKeyDirExists :: Property NoInfo
 torPrivKeyDirExists = File.dirExists torPrivKeyDir
 	`onChange` setperms
 	`requires` installed
