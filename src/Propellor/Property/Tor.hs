@@ -79,7 +79,7 @@ server = configured [("SocksPort", "0")]
 	`requires` Apt.installed ["ntp"]
 	`describe` "tor server"
 
-installed :: Property DebianLike
+installed :: Property NoInfo
 installed = Apt.installed ["tor"]
 
 -- | Specifies configuration settings. Any lines in the config file
