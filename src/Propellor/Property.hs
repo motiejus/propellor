@@ -22,11 +22,8 @@ module Propellor.Property (
 	-- * Constructing properties
 	, Propellor
 	, property
-	, property'
-	, OuterMetaTypesWitness
-	, ensureProperty
-	, pickOS
-	, withOS
+	--, ensureProperty
+	--, withOS
 	, unsupportedOS
 	, makeChange
 	, noChange
@@ -60,11 +57,6 @@ import Propellor.Exception
 import Utility.Exception
 import Utility.Monad
 import Utility.Misc
-
--- | Constructs a Property, from a description and an action to run to
--- ensure the Property is met.
-property :: Desc -> Propellor Result -> Property NoInfo
-property d s = simpleProperty d s mempty
 
 -- | Makes a perhaps non-idempotent Property be idempotent by using a flag
 -- file to indicate whether it has run before.
@@ -243,91 +235,9 @@ changesFileContent p f = checkResult getmd5 comparemd5 p
 -- > 	(\_ -> "/etc/aliases.db" `isNewerThan` "/etc/aliases")
 -- > 	(cmdProperty "newaliases" [])
 --
--- (If one of the files does not exist, the file that does exist is
--- considered to be the newer of the two.)
-isNewerThan :: FilePath -> FilePath -> IO Bool
-isNewerThan x y = do
-	mx <- mtime x
-	my <- mtime y
-	return (mx > my)
-  where
-	mtime f = catchMaybeIO $ modificationTimeHiRes <$> getFileStatus f
-
--- | Picks one of the two input properties to use,
--- depending on the targeted OS.
---
--- If both input properties support the targeted OS, then the
--- first will be used.
---
--- The resulting property will use the description of the first property
--- no matter which property is used in the end. So, it's often a good
--- idea to change the description to something clearer.
---
--- For example:
---
--- > upgraded :: Property (DebianLike + FreeBSD)
--- > upgraded = (Apt.upgraded `pickOS` Pkg.upgraded)
--- > 	`describe` "OS upgraded"
---
--- If neither input property supports the targeted OS, calls
--- `unsupportedOS`. Using the example above on a Fedora system would
--- fail that way.
-pickOS
-	::
-		( SingKind ('KProxy :: KProxy ka)
-		, SingKind ('KProxy :: KProxy kb)
-		, DemoteRep ('KProxy :: KProxy ka) ~ [MetaType]
-		, DemoteRep ('KProxy :: KProxy kb) ~ [MetaType]
-		, SingI c
-		-- Would be nice to have this constraint, but
-		-- union will not generate metatypes lists with the same
-		-- order of OS's as is used everywhere else. So,
-		-- would need a type-level sort.
-		--, Union a b ~ c
-		)
-	=> Property (MetaTypes (a :: ka))
-	-> Property (MetaTypes (b :: kb))
-	-> Property (MetaTypes c)
-pickOS a b = c `addChildren` [toChildProperty a, toChildProperty b]
-  where
-	-- This use of getSatisfy is safe, because both a and b
-	-- are added as children, so their info will propigate.
-	c = withOS (getDesc a) $ \_ o ->
-		if matching o a
-			then maybe (pure NoChange) id (getSatisfy a)
-			else if matching o b
-				then maybe (pure NoChange) id (getSatisfy b)
-				else unsupportedOS'
-	matching Nothing _ = False
-	matching (Just o) p =
-		Targeting (systemToTargetOS o)
-			`elem`
-		fromSing (proptype p)
-	proptype (Property t _ _ _ _) = t
-
--- | Makes a property that is satisfied differently depending on specifics
--- of the host's operating system.
---
--- > myproperty :: Property Debian
--- > myproperty = withOS "foo installed" $ \w o -> case o of
--- > 	(Just (System (Debian kernel (Stable release)) arch)) -> ensureProperty w ...
--- > 	(Just (System (Debian kernel suite) arch)) -> ensureProperty w ...
--- >	_ -> unsupportedOS'
---
--- Note that the operating system specifics may not be declared for all hosts,
--- which is where Nothing comes in.
-withOS
-	:: (SingI metatypes)
-	=> Desc
-	-> (OuterMetaTypesWitness '[] -> Maybe System -> Propellor Result)
-	-> Property (MetaTypes metatypes)
-withOS desc a = property desc $ a dummyoutermetatypes =<< getOS
-  where
-	-- Using this dummy value allows ensureProperty to be used
-	-- even though the inner property probably doesn't target everything
-	-- that the outer withOS property targets.
-	dummyoutermetatypes :: OuterMetaTypesWitness ('[])
-	dummyoutermetatypes = OuterMetaTypesWitness sing
+-- This can only be used on a Property that has NoInfo.
+--ensureProperty :: Property NoInfo -> Propellor Result
+--ensureProperty = catchPropellor . propertySatisfy
 
 -- | Tries the first property, but if it fails to work, instead uses
 -- the second.
@@ -416,8 +326,8 @@ isNewerThan x y = do
 -- > 	(Just (System (Debian suite) arch)) -> ...
 -- > 	(Just (System (Buntish release) arch)) -> ...
 -- >	Nothing -> unsupportedOS
-withOS :: Desc -> (Maybe System -> Propellor Result) -> Property NoInfo
-withOS desc a = property desc $ a =<< getOS
+--withOS :: Desc -> (Maybe System -> Propellor Result) -> Property NoInfo
+--withOS desc a = property desc $ a =<< getOS
 
 -- | Throws an error, for use in `withOS` when a property is lacking
 -- support for an OS.
@@ -428,7 +338,7 @@ unsupportedOS = go =<< getOS
 	go (Just o) = error $ "This property is not implemented for " ++ show o
 
 -- | Undoes the effect of a RevertableProperty.
-revert :: RevertableProperty i -> RevertableProperty i
+revert :: RevertableProperty setup undo -> RevertableProperty undo setup
 revert (RevertableProperty p1 p2) = RevertableProperty p2 p1
 
 makeChange :: IO () -> Propellor Result
@@ -437,11 +347,8 @@ makeChange a = liftIO a >> return MadeChange
 noChange :: Propellor Result
 noChange = return NoChange
 
--- | A no-op property.
---
--- This is the same as `mempty` from the `Monoid` instance.
-doNothing :: SingI t => Property (MetaTypes t)
-doNothing = mempty
+doNothing :: Property UnixLike
+doNothing = property "noop property" noChange
 
 -- | Registers an action that should be run at the very end, after
 -- propellor has checks all the properties of a host.
