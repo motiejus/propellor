@@ -7,7 +7,7 @@ module Propellor.Types.Info (
 	PropagateInfo(..),
 	addInfo,
 	toInfo,
-	fromInfo,
+	getInfo,
 	mapInfo,
 	propagatableInfo,
 	InfoVal(..),
@@ -48,6 +48,9 @@ class (Typeable v, Monoid v, Show v) => IsInfo v where
 -- | Any value in the `IsInfo` type class can be added to an Info.
 addInfo :: IsInfo v => Info -> v -> Info
 addInfo (Info l) v = Info (InfoEntry v:l)
+
+toInfo :: IsInfo v => v -> Info
+toInfo = addInfo mempty
 
 -- The list is reversed here because addInfo builds it up in reverse order.
 getInfo :: IsInfo v => Info -> v
