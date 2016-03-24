@@ -67,7 +67,7 @@ f `lacksLines` ls = fileProperty (f ++ " remove: " ++ show [ls]) (filter (`notEl
 -- | Replaces all the content of a file, ensuring that its modes do not
 -- allow it to be read or written by anyone other than the current user
 hasContentProtected :: FilePath -> [Line] -> Property UnixLike
-f `hasContentProtected` newcontent = fileProperty' ProtectedWrite
+f `hasContentProtected` newcontent = fileProperty' writeFileProtected 
 	("replace " ++ f)
 	(\_oldcontent -> newcontent) f
 
@@ -102,19 +102,26 @@ hasPrivContent' writemode source f context =
   where
 	desc = "privcontent " ++ f
 
--- | Replaces the content of a file with the transformed content of another file
-basedOn :: FilePath -> (FilePath, [Line] -> [Line]) -> Property UnixLike
-f `basedOn` (f', a) = property' desc $ \o -> do
-	tmpl <- liftIO $ readFile f'
-	ensureProperty o $ fileProperty desc (\_ -> a $ lines $ tmpl) f
-  where
-	desc = f ++ " is based on " ++ f'
+-- | Ensures that a line is present in a file, adding it to the end if not.
+containsLine :: FilePath -> Line -> Property UnixLike
+f `containsLine` l = f `containsLines` [l]
 
-lacksLines :: FilePath -> [Line] -> Property NoInfo
+containsLines :: FilePath -> [Line] -> Property UnixLike
+f `containsLines` ls = fileProperty (f ++ " contains:" ++ show ls) go f
+  where
+	go content = content ++ filter (`notElem` content) ls
+
+-- | Ensures that a line is not present in a file.
+-- Note that the file is ensured to exist, so if it doesn't, an empty
+-- file will be written.
+lacksLine :: FilePath -> Line -> Property UnixLike
+f `lacksLine` l = fileProperty (f ++ " remove: " ++ l) (filter (/= l)) f
+
+lacksLines :: FilePath -> [Line] -> Property UnixLike
 f `lacksLines` ls = fileProperty (f ++ " remove: " ++ show [ls]) (filter (`notElem` ls)) f
 
 -- | Replaces the content of a file with the transformed content of another file
-basedOn :: FilePath -> (FilePath, [Line] -> [Line]) -> Property NoInfo
+basedOn :: FilePath -> (FilePath, [Line] -> [Line]) -> Property UnixLike
 f `basedOn` (f', a) = property desc $ go =<< (liftIO $ readFile f')
   where
 	desc = "replace " ++ f
@@ -125,9 +132,9 @@ notPresent :: FilePath -> Property UnixLike
 notPresent f = check (doesFileExist f) $ property (f ++ " not present") $ 
 	makeChange $ nukeFile f
 
-fileProperty :: Desc -> ([Line] -> [Line]) -> FilePath -> Property NoInfo
+fileProperty :: Desc -> ([Line] -> [Line]) -> FilePath -> Property UnixLike
 fileProperty = fileProperty' writeFile
-fileProperty' :: (FilePath -> String -> IO ()) -> Desc -> ([Line] -> [Line]) -> FilePath -> Property NoInfo
+fileProperty' :: (FilePath -> String -> IO ()) -> Desc -> ([Line] -> [Line]) -> FilePath -> Property UnixLike
 fileProperty' writer desc a f = property desc $ go =<< liftIO (doesFileExist f)
   where
 	go True = do
@@ -156,7 +163,7 @@ newtype LinkTarget = LinkTarget FilePath
 -- | Creates or atomically updates a symbolic link.
 --
 -- Does not overwrite regular files or directories.
-isSymlinkedTo :: FilePath -> LinkTarget -> Property NoInfo
+isSymlinkedTo :: FilePath -> LinkTarget -> Property UnixLike
 link `isSymlinkedTo` (LinkTarget target) = property desc $
 	go =<< (liftIO $ tryIO $ getSymbolicLinkStatus link)
   where
@@ -178,7 +185,7 @@ link `isSymlinkedTo` (LinkTarget target) = property desc $
 	updateLink = createSymbolicLink target `viaStableTmp` link
 
 -- | Ensures that a file is a copy of another (regular) file.
-isCopyOf :: FilePath -> FilePath -> Property NoInfo
+isCopyOf :: FilePath -> FilePath -> Property UnixLike
 f `isCopyOf` f' = property desc $ go =<< (liftIO $ tryIO $ getFileStatus f')
   where
 	desc = f ++ " is copy of " ++ f'
@@ -199,7 +206,7 @@ f `isCopyOf` f' = property desc $ go =<< (liftIO $ tryIO $ getFileStatus f')
 		[Param "--preserve=all", Param "--", File src, File dest]
 
 -- | Ensures that a file/dir has the specified owner and group.
-ownerGroup :: FilePath -> User -> Group -> Property NoInfo
+ownerGroup :: FilePath -> User -> Group -> Property UnixLike
 ownerGroup f (User owner) (Group group) = p `describe` (f ++ " owner " ++ og)
   where
 	p = cmdProperty "chown" [og, f]
@@ -207,7 +214,7 @@ ownerGroup f (User owner) (Group group) = p `describe` (f ++ " owner " ++ og)
 	og = owner ++ ":" ++ group
 
 -- | Ensures that a file/dir has the specfied mode.
-mode :: FilePath -> FileMode -> Property NoInfo
+mode :: FilePath -> FileMode -> Property UnixLike
 mode f v = p `changesFile` f
   where
 	p = property (f ++ " mode " ++ show v) $ do
