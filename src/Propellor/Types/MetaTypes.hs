@@ -1,92 +1,100 @@
 {-# LANGUAGE TypeOperators, PolyKinds, DataKinds, TypeFamilies, UndecidableInstances, FlexibleInstances, GADTs #-}
 
 module Propellor.Types.MetaTypes (
+	Property(..),
+	mkProperty,
+	mkProperty',
 	MetaType(..),
+	OS(..),
 	UnixLike,
-	Linux,
-	DebianLike,
 	Debian,
 	Buntish,
-	ArchLinux,
 	FreeBSD,
 	HasInfo,
-	MetaTypes,
 	type (+),
+	OuterMetaTypes,
+	ensureProperty,
+	tightenTargets,
+	pickOS,
+	Sing,
 	sing,
 	SingI,
-	IncludesInfo,
-	Targets,
-	NonTargets,
-	NotSuperset,
-	Combine,
-	CheckCombine(..),
-	CheckCombinable,
-	type (&&),
-	Not,
-	EqT,
-	Union,
 ) where
 
-import Propellor.Types.Singletons
-import Propellor.Types.OS
+----- DEMO ----------
+
+foo :: Property (HasInfo + FreeBSD)
+foo = mkProperty' $ \t -> do
+	ensureProperty t jail
+
+-- bar :: Property (Debian + UsesPort 80 + FreeBSD)
+-- bar = aptinstall `pickOS` jail
+
+aptinstall :: Property Debian
+aptinstall = mkProperty $ do
+	return ()
+
+jail :: Property FreeBSD
+jail = mkProperty $ do
+	return ()
+
+----- END DEMO ----------
+
+data Property metatypes = Property metatypes (IO ())
+
+mkProperty :: SingI l => IO () -> Property (Sing l)
+mkProperty = mkProperty' . const
+
+mkProperty' :: SingI l => (OuterMetaTypes l -> IO ()) -> Property (Sing l)
+mkProperty' a = 
+	let p = Property sing (a (outerMetaTypes p))
+	in p
 
 data MetaType
-	= Targeting TargetOS -- ^ A target OS of a Property
-	| WithInfo           -- ^ Indicates that a Property has associated Info
-	deriving (Show, Eq, Ord)
+	= Targeting OS -- ^ A target OS of a Property
+	| WithInfo     -- ^ Indicates that a Property has associated Info
+
+data OS
+	= OSDebian
+	| OSBuntish -- ^ A well-known Debian derivative founded by a space tourist. The actual name of this distribution is not used in Propellor per <http://joeyh.name/blog/entry/trademark_nonsense/>
+	| OSFreeBSD
+	deriving (Show, Eq)
 
 -- | Any unix-like system
-type UnixLike = MetaTypes
-	'[ 'Targeting 'OSDebian
-	, 'Targeting 'OSBuntish
-	, 'Targeting 'OSArchLinux
-	, 'Targeting 'OSFreeBSD
-	]
-
--- | Any linux system
-type Linux = MetaTypes
-	'[ 'Targeting 'OSDebian
-	, 'Targeting 'OSBuntish
-	, 'Targeting 'OSArchLinux
-	]
-
--- | Debian and derivatives.
-type DebianLike = MetaTypes '[ 'Targeting 'OSDebian, 'Targeting 'OSBuntish ]
-type Debian = MetaTypes '[ 'Targeting 'OSDebian ]
-type Buntish = MetaTypes '[ 'Targeting 'OSBuntish ]
-type FreeBSD = MetaTypes '[ 'Targeting 'OSFreeBSD ]
-type ArchLinux = MetaTypes '[ 'Targeting 'OSArchLinux ]
+type UnixLike = Sing '[ 'Targeting 'OSDebian, 'Targeting 'OSBuntish, 'Targeting 'OSFreeBSD ]
+type Debian = Sing '[ 'Targeting 'OSDebian ]
+type Buntish = Sing '[ 'Targeting 'OSBuntish ]
+type FreeBSD = Sing '[ 'Targeting 'OSFreeBSD ]
 
 -- | Used to indicate that a Property adds Info to the Host where it's used.
-type HasInfo = MetaTypes '[ 'WithInfo ]
+type HasInfo = Sing '[ 'WithInfo ]
 
-type family IncludesInfo t :: Bool
-type instance IncludesInfo (MetaTypes l) = Elem 'WithInfo l
+-- | The data family of singleton types.
+data family Sing (x :: k)
 
-type MetaTypes = Sing
+-- | A class used to pass singleton values implicitly.
+class SingI t where
+	sing :: Sing t
 
--- This boilerplate would not be needed if the singletons library were
+-- This boilerplatw would not be needed if the singletons library were
 -- used. However, we're targeting too old a version of ghc to use it yet.
 data instance Sing (x :: MetaType) where
 	OSDebianS :: Sing ('Targeting 'OSDebian)
 	OSBuntishS :: Sing ('Targeting 'OSBuntish)
 	OSFreeBSDS :: Sing ('Targeting 'OSFreeBSD)
-	OSArchLinuxS :: Sing ('Targeting 'OSArchLinux)
 	WithInfoS :: Sing 'WithInfo
 instance SingI ('Targeting 'OSDebian) where sing = OSDebianS
 instance SingI ('Targeting 'OSBuntish) where sing = OSBuntishS
 instance SingI ('Targeting 'OSFreeBSD) where sing = OSFreeBSDS
-instance SingI ('Targeting 'OSArchLinux) where sing = OSArchLinuxS
 instance SingI 'WithInfo where sing = WithInfoS
-instance SingKind ('KProxy :: KProxy MetaType) where
-	type DemoteRep ('KProxy :: KProxy MetaType) = MetaType
-	fromSing OSDebianS = Targeting OSDebian
-	fromSing OSBuntishS = Targeting OSBuntish
-	fromSing OSFreeBSDS = Targeting OSFreeBSD
-	fromSing OSArchLinuxS = Targeting OSArchLinux
-	fromSing WithInfoS = WithInfo
 
--- | Convenience type operator to combine two `MetaTypes` lists.
+data instance Sing (x :: [k]) where
+	Nil :: Sing '[]
+	Cons :: Sing x -> Sing xs -> Sing (x ': xs)
+instance (SingI x, SingI xs) => SingI (x ': xs) where sing = Cons sing sing
+instance SingI '[] where sing = Nil
+
+-- | Convenience type operator to combine two `Sing` lists.
 --
 -- For example:
 --
@@ -94,53 +102,94 @@ instance SingKind ('KProxy :: KProxy MetaType) where
 --
 -- Which is shorthand for this type:
 --
--- > MetaTypes '[WithInfo, Targeting OSDebian]
+-- > Sing '[WithInfo, Targeting OSDebian]
 type family a + b :: ab
-type instance (MetaTypes a) + (MetaTypes b) = MetaTypes (Concat a b)
+type instance (Sing a) + (Sing b) = Sing (Concat a b)
 
 type family Concat (list1 :: [a]) (list2 :: [a]) :: [a]
 type instance Concat '[] bs = bs
 type instance Concat (a ': as) bs = a ': (Concat as bs)
 
--- | Combine two MetaTypes lists, yielding a list
--- that has targets present in both, and nontargets present in either.
-type family Combine (list1 :: [a]) (list2 :: [a]) :: [a]
-type instance Combine (list1 :: [a]) (list2 :: [a]) =
-	(Concat
-		(NonTargets list1 `Union` NonTargets list2)
-		(Targets list1 `Intersect` Targets list2)
-	)
+newtype OuterMetaTypes l = OuterMetaTypes (Sing l)
 
--- | Checks if two MetaTypes lists can be safely combined.
---
--- This should be used anywhere Combine is used, as an additional
--- constraint. For example:
---
--- > foo :: (CheckCombinable x y ~ 'CanCombine) => x -> y -> Combine x y
-type family CheckCombinable (list1 :: [a]) (list2 :: [a]) :: CheckCombine
--- As a special case, if either list is empty, let it be combined with the
--- other. This relies on MetaTypes list always containing at least
--- one target, so can only happen if there's already been a type error.
--- This special case lets the type checker show only the original type
--- error, and not an extra error due to a later CheckCombinable constraint.
-type instance CheckCombinable '[] list2 = 'CanCombine
-type instance CheckCombinable list1 '[] = 'CanCombine
-type instance CheckCombinable (l1 ': list1) (l2 ': list2) =
-	CheckCombinable' (Combine (l1 ': list1) (l2 ': list2))
-type family CheckCombinable' (combinedlist :: [a]) :: CheckCombine
-type instance CheckCombinable' '[] = 'CannotCombineTargets
-type instance CheckCombinable' (a ': rest) 
-	= If (IsTarget a)
-		'CanCombine
-		(CheckCombinable' rest)
+outerMetaTypes :: Property (Sing l) -> OuterMetaTypes l
+outerMetaTypes (Property metatypes _) = OuterMetaTypes metatypes
 
-data CheckCombine = CannotCombineTargets | CanCombine
+-- | Use `mkProperty''` to get the `OuterMetaTypes`. For example:
+--
+-- > foo = Property Debian
+-- > foo = mkProperty' $ \t -> do
+-- >	ensureProperty t (aptInstall "foo")
+--
+-- The type checker will prevent using ensureProperty with a property
+-- that does not support the target OSes needed by the OuterMetaTypes.
+-- In the example above, aptInstall must support Debian.
+--
+-- The type checker will also prevent using ensureProperty with a property
+-- with HasInfo in its MetaTypes. Doing so would cause the info associated
+-- with the property to be lost.
+ensureProperty
+	::
+		( (Targets inner `NotSuperset` Targets outer) ~ 'CanCombineTargets
+		, CannotUseEnsurePropertyWithInfo inner ~ 'True
+		)
+	=> OuterMetaTypes outer
+	-> Property (Sing inner)
+	-> IO ()
+ensureProperty (OuterMetaTypes outermetatypes) (Property innermetatypes a) = a
+
+-- The name of this was chosen to make type errors a more understandable.
+type family CannotUseEnsurePropertyWithInfo (l :: [a]) :: Bool
+type instance CannotUseEnsurePropertyWithInfo '[] = 'True
+type instance CannotUseEnsurePropertyWithInfo (t ': ts) = Not (t `EqT` 'WithInfo) && CannotUseEnsurePropertyWithInfo ts
+
+-- | Tightens the MetaType list of a Property, to contain fewer targets.
+--
+-- Anything else in the MetaType list is passed through unchanged.
+tightenTargets
+	:: 
+		( combined ~ Concat (NonTargets old) (Intersect (Targets old) (Targets new))
+		, CannotCombineTargets old new combined ~ 'CanCombineTargets
+		, SingI combined
+		)
+	=> Sing new
+	-> Property (Sing old)
+	-> Property (Sing combined)
+tightenTargets _ (Property old a) = Property sing a
+
+-- | Picks one of the two input properties to use,
+-- depending on the targeted OS.
+--
+-- If both input properties support the targeted OS, then the
+-- first will be used.
+pickOS
+	::
+		( combined ~ Union a b
+		, SingI combined
+		)
+	=> Property (Sing a)
+	-> Property (Sing b)
+	-> Property (Sing combined)
+pickOS a@(Property ta ioa) b@(Property tb iob) = Property sing io
+  where
+	-- TODO pick with of ioa or iob to use based on final OS of
+	-- system being run on.
+	io = undefined
+
+data CheckCombineTargets = CannotCombineTargets | CanCombineTargets
+
+-- | Detect intersection of two lists that don't have any common targets.
+-- 
+-- The name of this was chosen to make type errors a more understandable.
+type family CannotCombineTargets (list1 :: [a]) (list2 :: [a]) (listr :: [a]) :: CheckCombineTargets
+type instance CannotCombineTargets l1 l2 '[] = 'CannotCombineTargets
+type instance CannotCombineTargets l1 l2 (a ': rest) = 'CanCombineTargets
 
 -- | Every item in the subset must be in the superset.
 --
--- The name of this was chosen to make type errors more understandable.
-type family NotSuperset (superset :: [a]) (subset :: [a]) :: CheckCombine
-type instance NotSuperset superset '[] = 'CanCombine
+-- The name of this was chosen to make type errors a more understandable.
+type family NotSuperset (superset :: [a]) (subset :: [a]) :: CheckCombineTargets
+type instance NotSuperset superset '[] = 'CanCombineTargets
 type instance NotSuperset superset (s ': rest) =
 	If (Elem s superset)
 		(NotSuperset superset rest)
@@ -161,8 +210,8 @@ type family NonTargets (l :: [a]) :: [a]
 type instance NonTargets '[] = '[]
 type instance NonTargets (x ': xs) =
 	If (IsTarget x)
-		(NonTargets xs)
-		(x ': NonTargets xs)
+		(Targets xs)
+		(x ': Targets xs)
 
 -- | Type level elem
 type family Elem (a :: t) (list :: [t]) :: Bool
@@ -202,14 +251,6 @@ type instance EqT 'OSBuntish 'OSDebian  = 'False
 type instance EqT 'OSBuntish 'OSFreeBSD = 'False
 type instance EqT 'OSFreeBSD 'OSDebian  = 'False
 type instance EqT 'OSFreeBSD 'OSBuntish = 'False
-type instance EqT 'OSArchLinux 'OSArchLinux = 'True
-type instance EqT 'OSArchLinux 'OSDebian    = 'False
-type instance EqT 'OSArchLinux 'OSBuntish   = 'False
-type instance EqT 'OSArchLinux 'OSFreeBSD   = 'False
-type instance EqT 'OSDebian    'OSArchLinux = 'False
-type instance EqT 'OSBuntish   'OSArchLinux = 'False
-type instance EqT 'OSFreeBSD   'OSArchLinux = 'False
-
 -- More modern version if the combinatiorial explosion gets too bad later:
 --
 -- type family Eq (a :: MetaType) (b :: MetaType) where
