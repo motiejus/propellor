@@ -80,7 +80,7 @@ withPrivData
 	::
 		( IsContext c
 		, IsPrivDataSource s
-		, IncludesInfo metatypes ~ 'True
+		, IncludesInfo metatypes ~ True
 		)
 	=> s
 	-> c
@@ -93,7 +93,7 @@ withSomePrivData
 	::
 		( IsContext c
 		, IsPrivDataSource s
-		, IncludesInfo metatypes ~ 'True
+		, IncludesInfo metatypes ~ True
 		)
 	=> [s]
 	-> c
@@ -105,7 +105,7 @@ withPrivData'
 	::
 		( IsContext c
 		, IsPrivDataSource s
-		, IncludesInfo metatypes ~ 'True
+		, IncludesInfo metatypes ~ True
 		)
 	=> ((PrivDataField, PrivData) -> v)
 	-> [s]
@@ -126,7 +126,11 @@ withPrivData' feed srclist c mkprop = addinfo $ mkprop $ \a ->
 			"Fix this by running:" :
 			showSet (map (\s -> (privDataField s, Context cname, describePrivDataSource s)) srclist)
 		return FailedChange
-	addinfo p = p `addInfoProperty` (toInfo privset)
+	addinfo p = Property undefined -- FIXME: should use sing here
+		(propertyDesc p)
+		(propertySatisfy p)
+		(propertyInfo p `addInfo` privset)
+		(propertyChildren p)
 	privset = PrivInfo $ S.fromList $
 		map (\s -> (privDataField s, describePrivDataSource s, hc)) srclist
 	fieldnames = map show fieldlist
