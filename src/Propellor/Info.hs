@@ -35,41 +35,14 @@ import Data.Monoid
 import Control.Applicative
 import Prelude
 
--- | Adds info to a Property.
---
--- The new Property will include HasInfo in its metatypes.
-setInfoProperty
-	-- -Wredundant-constraints is turned off because
-	-- this constraint appears redundant, but is actually
-	-- crucial.
-	:: (MetaTypes metatypes' ~ (+) HasInfo metatypes, SingI metatypes')
-	=> Property metatypes
-	-> Info
-	-> Property (MetaTypes metatypes')
-setInfoProperty (Property _ d a oldi c) newi =
-	Property sing d a (oldi <> newi) c
-
--- | Adds more info to a Property that already HasInfo.
-addInfoProperty
-	-- -Wredundant-constraints is turned off because
-	-- this constraint appears redundant, but is actually
-	-- crucial.
-	:: (IncludesInfo metatypes ~ 'True)
-	=> Property metatypes
-	-> Info
-	-> Property metatypes
-addInfoProperty (Property t d a oldi c) newi =
-	Property t d a (oldi <> newi) c
-
--- | Makes a property that does nothing but set some `Info`.
 pureInfoProperty :: (IsInfo v) => Desc -> v -> Property (HasInfo + UnixLike)
-pureInfoProperty desc v = pureInfoProperty' desc (toInfo v)
+pureInfoProperty desc v = pureInfoProperty' desc (addInfo mempty v)
 
 pureInfoProperty' :: Desc -> Info -> Property (HasInfo + UnixLike)
-pureInfoProperty' desc i = setInfoProperty p i
+pureInfoProperty' desc i = addInfoProperty p i
   where
 	p :: Property UnixLike
-	p = property ("has " ++ desc) (return NoChange)
+	p = mkProperty ("has " ++ desc) (return NoChange)
 
 -- | Gets a value from the host's Info.
 askInfo :: (IsInfo v) => Propellor v
@@ -97,20 +70,8 @@ osDebian' kernel suite arch = tightenTargets $ os (System (Debian kernel suite) 
 -- | Specifies that a host's operating system is a well-known Debian
 -- derivative founded by a space tourist.
 --
--- (The actual name of this distribution is not used in Propellor per
--- <http://joeyh.name/blog/entry/trademark_nonsense/>)
-osBuntish :: Release -> Architecture -> Property (HasInfo + Buntish)
-osBuntish release arch = tightenTargets $ os (System (Buntish release) arch)
-
--- | Specifies that a host's operating system is FreeBSD
--- and further indicates the release and architecture.
-osFreeBSD :: FreeBSDRelease -> Architecture -> Property (HasInfo + FreeBSD)
-osFreeBSD release arch = tightenTargets $ os (System (FreeBSD release) arch)
-
--- | Specifies that a host's operating system is Arch Linux
-osArchLinux :: Architecture -> Property (HasInfo + ArchLinux)
-osArchLinux arch = tightenTargets $ os (System (ArchLinux) arch)
-
+-- This only provides info for other Properties, so they can act
+-- conditionally on the os.
 os :: System -> Property (HasInfo + UnixLike)
 os system = pureInfoProperty ("Operating " ++ show system) (InfoVal system)
 
@@ -131,7 +92,7 @@ ipv4 :: String -> Property (HasInfo + UnixLike)
 ipv4 = addDNS . Address . IPv4
 
 -- | Indicate that a host has an AAAA record in the DNS.
-ipv6 :: String -> Property HasInfo
+ipv6 :: String -> Property (HasInfo + UnixLike)
 ipv6 = addDNS . Address . IPv6
 
 -- | Indicates another name for the host in the DNS.
