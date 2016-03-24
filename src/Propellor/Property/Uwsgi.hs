@@ -37,7 +37,7 @@ appVal :: AppName -> FilePath
 appVal an = "/etc/uwsgi/apps-enabled/" </> an <.> "ini"
 
 appValRelativeCfg :: AppName -> File.LinkTarget
-appValRelativeCfg an = File.LinkTarget $ "../apps-available/" ++ an
+appValRelativeCfg an = File.LinkTarget $ "../apps-available" </> an <.> "ini"
 
 installed :: Property DebianLike
 installed = Apt.installed ["uwsgi"]
