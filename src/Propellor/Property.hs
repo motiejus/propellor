@@ -22,7 +22,8 @@ module Propellor.Property (
 	-- * Constructing properties
 	, Propellor
 	, property
-	--, ensureProperty
+	, property'
+	, ensureProperty
 	--, withOS
 	, unsupportedOS
 	, makeChange
@@ -52,8 +53,10 @@ import Prelude
 
 import Propellor.Types
 import Propellor.Types.ResultCheck
+import Propellor.Types.MetaTypes
 import Propellor.Info
 import Propellor.Exception
+import Propellor.EnsureProperty
 import Utility.Exception
 import Utility.Monad
 import Utility.Misc
@@ -164,80 +167,6 @@ describe = setDesc
 (==>) :: IsProp (Property i) => Desc -> Property i -> Property i
 (==>) = flip describe
 infixl 1 ==>
-
--- | Tries the first property, but if it fails to work, instead uses
--- the second.
-fallback :: (Combines p1 p2) => p1 -> p2 -> CombinedType p1 p2
-fallback = combineWith combiner revertcombiner
-  where
-	combiner (Just a1) (Just a2) = Just $ do
-		r <- a1
-		if r == FailedChange
-			then a2
-			else return r
-	combiner (Just a1) Nothing = Just a1
-	combiner Nothing _ = Nothing
-	revertcombiner = (<>)
-
--- | Indicates that a Property may change a particular file. When the file
--- is modified in any way (including changing its permissions or mtime),
--- the property will return MadeChange instead of NoChange.
-changesFile :: Checkable p i => p i -> FilePath -> Property i
-changesFile p f = checkResult getstat comparestat p
-  where
-	getstat = catchMaybeIO $ getSymbolicLinkStatus f
-	comparestat oldstat = do
-		newstat <- getstat
-		return $ if samestat oldstat newstat then NoChange else MadeChange
-	samestat Nothing Nothing = True
-	samestat (Just a) (Just b) = and
-		-- everything except for atime
-		[ deviceID a == deviceID b
-		, fileID a == fileID b
-		, fileMode a == fileMode b
-		, fileOwner a == fileOwner b
-		, fileGroup a == fileGroup b
-		, specialDeviceID a == specialDeviceID b
-		, fileSize a == fileSize b
-		, modificationTimeHiRes a == modificationTimeHiRes b
-		, isBlockDevice a == isBlockDevice b
-		, isCharacterDevice a == isCharacterDevice b
-		, isNamedPipe a == isNamedPipe b
-		, isRegularFile a == isRegularFile b
-		, isDirectory a == isDirectory b
-		, isSymbolicLink a == isSymbolicLink b
-		, isSocket a == isSocket b
-		]
-	samestat _ _ = False
-
--- | Like `changesFile`, but compares the content of the file.
--- Changes to mtime etc that do not change file content are treated as
--- NoChange.
-changesFileContent :: Checkable p i => p i -> FilePath -> Property i
-changesFileContent p f = checkResult getmd5 comparemd5 p
-  where
-	getmd5 = catchMaybeIO $ MD5.md5 . MD5.Str <$> readFileStrict f
-	comparemd5 oldmd5 = do
-		newmd5 <- getmd5
-		return $ if oldmd5 == newmd5 then NoChange else MadeChange
-
--- | Determines if the first file is newer than the second file.
---
--- This can be used with `check` to only run a command when a file
--- has changed.
---
--- > check ("/etc/aliases" `isNewerThan` "/etc/aliases.db")
--- > 	(cmdProperty "newaliases" [] `assume` MadeChange) -- updates aliases.db
---
--- Or it can be used with `checkResult` to test if a command made a change.
---
--- > checkResult (return ())
--- > 	(\_ -> "/etc/aliases.db" `isNewerThan` "/etc/aliases")
--- > 	(cmdProperty "newaliases" [])
---
--- This can only be used on a Property that has NoInfo.
---ensureProperty :: Property NoInfo -> Propellor Result
---ensureProperty = catchPropellor . propertySatisfy
 
 -- | Tries the first property, but if it fails to work, instead uses
 -- the second.

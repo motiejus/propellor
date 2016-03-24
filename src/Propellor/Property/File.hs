@@ -97,8 +97,8 @@ hasPrivContent' :: (IsContext c, IsPrivDataSource s) => FileWriteMode -> s -> Fi
 hasPrivContent' writemode source f context = 
 	withPrivData source context $ \getcontent -> 
 		property' desc $ \o -> getcontent $ \privcontent -> 
-			ensureProperty o $ fileProperty' writemode desc
-				(\_oldcontent -> privDataByteString privcontent) f
+			ensureProperty o $ fileProperty' writer desc
+				(\_oldcontent -> privDataLines privcontent) f
   where
 	desc = "privcontent " ++ f
 
@@ -122,10 +122,11 @@ f `lacksLines` ls = fileProperty (f ++ " remove: " ++ show [ls]) (filter (`notEl
 
 -- | Replaces the content of a file with the transformed content of another file
 basedOn :: FilePath -> (FilePath, [Line] -> [Line]) -> Property UnixLike
-f `basedOn` (f', a) = property desc $ go =<< (liftIO $ readFile f')
+f `basedOn` (f', a) = property' desc $ \o -> do
+	tmpl <- liftIO $ readFile f'
+	ensureProperty o $ fileProperty desc (\_ -> a $ lines $ tmpl) f
   where
 	desc = "replace " ++ f
-	go tmpl = ensureProperty $ fileProperty desc (\_ -> a $ lines $ tmpl) f
 
 -- | Removes a file. Does not remove symlinks or non-plain-files.
 notPresent :: FilePath -> Property UnixLike

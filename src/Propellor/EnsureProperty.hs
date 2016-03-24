@@ -7,28 +7,24 @@
 module Propellor.EnsureProperty
 	( ensureProperty
 	, property'
-	, OuterMetaTypesWitness(..)
+	, OuterMetaTypes
 	) where
 
 import Propellor.Types
-import Propellor.Types.Core
 import Propellor.Types.MetaTypes
 import Propellor.Exception
-
-import Data.Monoid
-import Prelude
 
 -- | For when code running in the Propellor monad needs to ensure a
 -- Property.
 --
--- Use `property'` to get the `OuterMetaTypesWithness`. For example:
+-- Use `property'` to get the `OuterMetaTypes`. For example:
 --
 -- > foo = Property Debian
--- > foo = property' "my property" $ \w -> do
--- > 	ensureProperty w (aptInstall "foo")
+-- > foo = property' $ \o -> do
+-- > 	ensureProperty o (aptInstall "foo")
 --
 -- The type checker will prevent using ensureProperty with a property
--- that does not support the target OSes needed by the OuterMetaTypesWitness.
+-- that does not support the target OSes needed by the OuterMetaTypes.
 -- In the example above, aptInstall must support Debian, since foo
 -- is supposed to support Debian.
 --
@@ -37,37 +33,34 @@ import Prelude
 -- with the property to be lost.
 ensureProperty
 	::
-		-- -Wredundant-constraints is turned off because
-		-- this constraint appears redundant, but is actually
-		-- crucial.
-		( Cannot_ensureProperty_WithInfo inner ~ 'True
-		, (Targets inner `NotSuperset` Targets outer) ~ 'CanCombine
+		( (Targets inner `NotSuperset` Targets outer) ~ 'CanCombineTargets
+		, CannotUseEnsurePropertyWithInfo inner ~ 'True
 		)
-	=> OuterMetaTypesWitness outer
-	-> Property (MetaTypes inner)
+	=> OuterMetaTypes outer
+	-> Property (Sing inner)
 	-> Propellor Result
-ensureProperty _ = maybe (return NoChange) catchPropellor . getSatisfy
+ensureProperty _ = catchPropellor . propertySatisfy
 
--- The name of this was chosen to make type errors a bit more understandable.
-type family Cannot_ensureProperty_WithInfo (l :: [a]) :: Bool
-type instance Cannot_ensureProperty_WithInfo '[] = 'True
-type instance Cannot_ensureProperty_WithInfo (t ': ts) =
-	Not (t `EqT` 'WithInfo) && Cannot_ensureProperty_WithInfo ts
+-- The name of this was chosen to make type errors a more understandable.
+type family CannotUseEnsurePropertyWithInfo (l :: [a]) :: Bool
+type instance CannotUseEnsurePropertyWithInfo '[] = 'True
+type instance CannotUseEnsurePropertyWithInfo (t ': ts) =
+	Not (t `EqT` 'WithInfo) && CannotUseEnsurePropertyWithInfo ts
 
 -- | Constructs a property, like `property`, but provides its
--- `OuterMetaTypesWitness`.
+-- `OuterMetaTypes`.
 property'
 	:: SingI metatypes
 	=> Desc
-	-> (OuterMetaTypesWitness metatypes -> Propellor Result)
-	-> Property (MetaTypes metatypes)
+	-> (OuterMetaTypes metatypes -> Propellor Result)
+	-> Property (Sing metatypes)
 property' d a =
-	let p = Property sing d (Just (a (outerMetaTypesWitness p))) mempty mempty
+	let p = Property sing d (a (outerMetaTypes p)) mempty mempty
 	in p
 
 -- | Used to provide the metatypes of a Property to calls to 
 -- 'ensureProperty` within it.
-newtype OuterMetaTypesWitness metatypes = OuterMetaTypesWitness (MetaTypes metatypes)
+newtype OuterMetaTypes metatypes = OuterMetaTypes (Sing metatypes)
 
-outerMetaTypesWitness :: Property (MetaTypes l) -> OuterMetaTypesWitness l
-outerMetaTypesWitness (Property metatypes _ _ _ _) = OuterMetaTypesWitness metatypes
+outerMetaTypes :: Property (Sing l) -> OuterMetaTypes l
+outerMetaTypes (Property metatypes _ _ _ _) = OuterMetaTypes metatypes
