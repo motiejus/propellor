@@ -35,7 +35,7 @@ import Utility.Exception
 -- with nice display of what's being done.
 mainProperties :: Host -> IO ()
 mainProperties host = do
-	ret <- runPropellor host $ ensureChildProperties [toProp overall]
+	ret <- runPropellor host $ ensureChildProperties [toChildProperty overall]
 	messagesDone
 	case ret of
 		FailedChange -> exitWith (ExitFailure 1)
