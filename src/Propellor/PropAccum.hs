@@ -26,7 +26,7 @@ import Propellor.Property
 -- > 	! oldproperty
 -- > 	& otherproperty
 host :: HostName -> Props metatypes -> Host
-host hn (Props c) = Host hn c (mconcat (map getInfoRecursive c))
+host hn (Props ps) = Host hn ps (mconcat (map getInfoRecursive ps))
 
 -- | Props is a combination of a list of properties, with their combined 
 -- metatypes.
