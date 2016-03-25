@@ -2,13 +2,14 @@ module Propellor.Property.Network where
 
 import Propellor.Base
 import Propellor.Property.File
+import Propellor.Types.MetaTypes
 
 import Data.Char
 
 type Interface = String
 
-ifUp :: Interface -> Property NoInfo
-ifUp iface = cmdProperty "ifup" [iface]
+ifUp :: Interface -> Property DebianLike
+ifUp iface = tightenTargets $ cmdProperty "ifup" [iface]
 	`assume` MadeChange
 
 -- | Resets /etc/network/interfaces to a clean and empty state,
