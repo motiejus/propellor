@@ -7,7 +7,7 @@ module Propellor.PropAccum
 	, (&)
 	, (&^)
 	, (!)
-	, propagateContainer
+	--, propagateContainer
 	) where
 
 import Propellor.Types
@@ -37,9 +37,7 @@ infixl 1 &
 infixl 1 &^
 infixl 1 !
 
-type family GetMetaTypes x
-type instance GetMetaTypes (Property (MetaTypes t)) = MetaTypes t
-type instance GetMetaTypes (RevertableProperty (MetaTypes t) undo) = MetaTypes t
+	getProperties :: h -> [ChildProperty]
 
 -- | Adds a property to a Props.
 --
@@ -74,7 +72,7 @@ Props c & p = Props (c ++ [toChildProperty p])
 Props c &^ p = Props (toChildProperty p : c)
 
 -- | Adds a property in reverted form.
-(!) :: IsProp (RevertableProperty i) => PropAccum h => h -> RevertableProperty i -> h
+(!) :: IsProp (RevertableProperty undometatypes setupmetatypes) => PropAccum h => h -> RevertableProperty setupmetatypes undometatypes -> h
 h ! p = h & revert p
 
 infixl 1 &
@@ -88,6 +86,8 @@ instance PropAccum Host where
 		(getInfoRecursive p <> is)
 	getProperties = hostProperties
 
+{-
+
 -- | Adjust the provided Property, adding to its
 -- propertyChidren the properties of the provided container.
 -- 
@@ -100,9 +100,10 @@ propagateContainer
 	:: (PropAccum container)
 	=> String
 	-> container
-	-> Property HasInfo
-	-> Property HasInfo
-propagateContainer containername c prop = infoProperty
+	-> Property metatypes
+	-> Property metatypes
+propagateContainer containername c prop = Property
+	undefined
 	(propertyDesc prop)
 	(propertySatisfy prop)
 	(propertyInfo prop)
@@ -114,3 +115,5 @@ propagateContainer containername c prop = infoProperty
 			(propagatableInfo (propertyInfo p))
 		    cs = map go (propertyChildren p)
 		in infoProperty (propertyDesc p) (propertySatisfy p) i cs
+
+-}
