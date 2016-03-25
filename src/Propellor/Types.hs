@@ -16,8 +16,9 @@ module Propellor.Types
 	, MetaTypes
 	, OS(..)
 	, UnixLike
-	, Debian
+	, Linux
 	, DebianLike
+	, Debian
 	, Buntish
 	, FreeBSD
 	, HasInfo

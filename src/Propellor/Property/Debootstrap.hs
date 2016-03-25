@@ -47,17 +47,14 @@ toParams (c1 :+ c2) = toParams c1 <> toParams c2
 --
 -- The System can be any OS and architecture that debootstrap
 -- and the kernel support.
-built :: FilePath -> System -> DebootstrapConfig -> Property HasInfo
-built target system config = built' (toProp installed) target system config
+built :: FilePath -> System -> DebootstrapConfig -> Property Linux
+built target system config = built' (setupRevertableProperty installed) target system config
 
-built' :: (Combines (Property NoInfo) (Property i)) => Property i -> FilePath -> System -> DebootstrapConfig -> Property (CInfo NoInfo i)
+built' :: Property Linux -> FilePath -> System -> DebootstrapConfig -> Property Linux
 built' installprop target system@(System _ arch) config =
 	check (unpopulated target <||> ispartial) setupprop
 		`requires` installprop
   where
-	go = check (unpopulated target <||> ispartial) setupprop
-		`requires` installprop
-
 	setupprop :: Property Linux
 	setupprop = property ("debootstrapped " ++ target) $ liftIO $ do
 		createDirectoryIfMissing True target
@@ -95,20 +92,21 @@ extractSuite (System (FreeBSD _) _) = Nothing
 -- When necessary, falls back to installing debootstrap from source.
 -- Note that installation from source is done by downloading the tarball
 -- from a Debian mirror, with no cryptographic verification.
-installed :: RevertableProperty NoInfo
+installed :: RevertableProperty Linux Linux
 installed = install <!> remove
   where
-	install = withOS "debootstrap installed" $ \o ->
+	install = withOS "debootstrap installed" $ \o os ->
 		ifM (liftIO $ isJust <$> programPath)
 			( return NoChange
-			, ensureProperty (installon o)
+			, ensureProperty o (installon os)
 			)
 
 	installon (Just (System (Debian _) _)) = aptinstall
 	installon (Just (System (Buntish _) _)) = aptinstall
 	installon _ = sourceInstall
 
-	remove = withOS "debootstrap removed" $ ensureProperty . removefrom
+	remove = withOS "debootstrap removed" $ \o os -> 
+		ensureProperty o (removefrom os)
 	removefrom (Just (System (Debian _) _)) = aptremove
 	removefrom (Just (System (Buntish _) _)) = aptremove
 	removefrom _ = sourceRemove
