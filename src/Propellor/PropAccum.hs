@@ -19,6 +19,9 @@ import Propellor.Types
 import Propellor.Types.MetaTypes
 import Propellor.Property
 
+import Data.Monoid
+import Prelude
+
 -- | Defines a host and its properties.
 --
 -- > host "example.com" $ props

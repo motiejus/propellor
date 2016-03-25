@@ -79,7 +79,8 @@ adjustIniSection desc header =
 -- | Ensures that a .ini file exists and contains a section
 -- with a key=value setting.
 containsIniSetting :: FilePath -> (IniSection, IniKey, String) -> Property UnixLike
-containsIniSetting f (header, key, value) = adjustIniSection
+containsIniSetting f (header, key, value) =
+	adjustIniSection
 	(f ++ " section [" ++ header ++ "] contains " ++ key ++ "=" ++ value)
 	header
 	go
@@ -108,7 +109,8 @@ hasIniSection f header keyvalues = adjustIniSection
 
 -- | Ensures that a .ini file does not contain the specified section.
 lacksIniSection :: FilePath -> IniSection -> Property UnixLike
-lacksIniSection f header = adjustIniSection
+lacksIniSection f header =
+	adjustIniSection
 	(f ++ " lacks section [" ++ header ++ "]")
 	header
 	(const []) -- remove all lines of section
