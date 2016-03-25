@@ -7,7 +7,7 @@ import qualified Propellor.Property.File as File
 
 data Eep = YesReallyDeleteHome
 
-accountFor :: User -> Property NoInfo
+accountFor :: User -> Property DebianLike
 accountFor user@(User u) = check nohomedir go
 	`describe` ("account for " ++ u)
   where
@@ -18,10 +18,10 @@ accountFor user@(User u) = check nohomedir go
 		, u
 		]
 
-systemAccountFor :: User -> Property NoInfo
+systemAccountFor :: User -> Property DebianLike
 systemAccountFor user@(User u) = systemAccountFor' user Nothing (Just (Group u))
 
-systemAccountFor' :: User -> Maybe FilePath -> Maybe Group -> Property NoInfo
+systemAccountFor' :: User -> Maybe FilePath -> Maybe Group -> Property DebianLike
 systemAccountFor' (User u) mhome mgroup = check nouser go
 	`describe` ("system account for " ++ u)
   where
@@ -43,7 +43,7 @@ systemAccountFor' (User u) mhome mgroup = check nouser go
 		]
 
 -- | Removes user home directory!! Use with caution.
-nuked :: User -> Eep -> Property NoInfo
+nuked :: User -> Eep -> Property DebianLike
 nuked user@(User u) _ = check hashomedir go
 	`describe` ("nuked user " ++ u)
   where
@@ -75,8 +75,7 @@ hasPassword :: User -> Property (HasInfo + DebianLike)
 hasPassword user = hasPassword' user hostContext
 
 hasPassword' :: IsContext c => User -> c -> Property (HasInfo + DebianLike)
-hasPassword' (User u) context = go
-	`requires` shadowConfig True
+hasPassword' (User u) context = go `requires` shadowConfig True
   where
 	go :: Property (HasInfo + UnixLike)
 	go = withSomePrivData srcs context $
@@ -96,7 +95,7 @@ setPassword getpassword = getpassword $ go
 
 -- | Makes a user's password be the passed String. Highly insecure:
 -- The password is right there in your config file for anyone to see!
-hasInsecurePassword :: User -> String -> Property NoInfo
+hasInsecurePassword :: User -> String -> Property DebianLike
 hasInsecurePassword u@(User n) p = property (n ++ " has insecure password") $
 	chpasswd u p []
 
@@ -106,7 +105,7 @@ chpasswd (User user) v ps = makeChange $ withHandle StdinHandle createProcessSuc
 		hPutStrLn h $ user ++ ":" ++ v
 		hClose h
 
-lockedPassword :: User -> Property NoInfo
+lockedPassword :: User -> Property DebianLike
 lockedPassword user@(User u) = check (not <$> isLockedPassword user) go
 	`describe` ("locked " ++ u ++ " password")
   where
@@ -132,7 +131,7 @@ isLockedPassword user = (== LockedPassword) <$> getPasswordStatus user
 homedir :: User -> IO FilePath
 homedir (User user) = homeDirectory <$> getUserEntryForName user
 
-hasGroup :: User -> Group -> Property NoInfo
+hasGroup :: User -> Group -> Property DebianLike
 hasGroup (User user) (Group group') = check test go
 	`describe` unwords ["user", user, "in group", group']
   where
@@ -147,12 +146,12 @@ hasGroup (User user) (Group group') = check test go
 --
 -- Note that some groups may only exit after installation of other
 -- software. When a group does not exist yet, the user won't be added to it.
-hasDesktopGroups :: User -> Property NoInfo
-hasDesktopGroups user@(User u) = property desc $ do
+hasDesktopGroups :: User -> Property DebianLike
+hasDesktopGroups user@(User u) = property' desc $ \o -> do
 	existinggroups <- map (fst . break (== ':')) . lines
 		<$> liftIO (readFile "/etc/group")
 	let toadd = filter (`elem` existinggroups) desktopgroups
-	ensureProperty $ propertyList desc $ map (hasGroup user . Group) toadd
+	ensureProperty o $ propertyList desc $ map (hasGroup user . Group) toadd
   where
 	desc = "user " ++ u ++ " is in standard desktop groups"
 	-- This list comes from user-setup's debconf
@@ -172,7 +171,7 @@ hasDesktopGroups user@(User u) = property desc $ do
 		]
 
 -- | Controls whether shadow passwords are enabled or not.
-shadowConfig :: Bool -> Property NoInfo
+shadowConfig :: Bool -> Property DebianLike
 shadowConfig True = check (not <$> shadowExists)
 	(cmdProperty "shadowconfig" ["on"])
 		`describe` "shadow passwords enabled"
@@ -188,7 +187,7 @@ shadowExists = doesFileExist "/etc/shadow"
 hasLoginShell :: User -> FilePath -> Property DebianLike
 hasLoginShell user loginshell = shellSetTo user loginshell `requires` shellEnabled loginshell
 
-shellSetTo :: User -> FilePath -> Property NoInfo
+shellSetTo :: User -> FilePath -> Property DebianLike
 shellSetTo (User u) loginshell = check needchangeshell
 	(cmdProperty "chsh" ["--shell", loginshell, u])
 		`describe` (u ++ " has login shell " ++ loginshell)
@@ -199,5 +198,4 @@ shellSetTo (User u) loginshell = check needchangeshell
 
 -- | Ensures that /etc/shells contains a shell.
 shellEnabled :: FilePath -> Property DebianLike
-shellEnabled loginshell = tightenTargets $
-	"/etc/shells" `File.containsLine` loginshell
+shellEnabled loginshell = "/etc/shells" `File.containsLine` loginshell
