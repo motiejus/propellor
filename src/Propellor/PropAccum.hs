@@ -26,17 +26,17 @@ import Propellor.Property
 -- > 	! oldproperty
 -- > 	& otherproperty
 host :: HostName -> Props metatypes -> Host
-host hn (Props i c) = Host hn c i
+host hn (Props c) = Host hn c (mconcat (map getInfoRecursive c))
 
 -- | Props is a combination of a list of properties, with their combined 
--- metatypes and info.
-data Props metatypes = Props Info [ChildProperty]
+-- metatypes.
+data Props metatypes = Props [ChildProperty]
 
 -- | Start accumulating a list of properties.
 --
 -- Properties can be added to it using `(&)` etc.
 props :: Props UnixLike
-props = Props mempty []
+props = Props []
 
 infixl 1 &
 infixl 1 &^
@@ -58,7 +58,7 @@ type instance GetMetaTypes (RevertableProperty (MetaTypes t) undo) = MetaTypes t
 	=> Props (MetaTypes x)
 	-> p
 	-> Props (MetaTypes (Combine x y))
-Props i c & p = Props (i <> getInfoRecursive p) (c ++ [toProp p])
+Props c & p = Props (c ++ [toProp p])
 
 -- | Adds a property before any other properties.
 (&^)
@@ -70,7 +70,7 @@ Props i c & p = Props (i <> getInfoRecursive p) (c ++ [toProp p])
 	=> Props (MetaTypes x)
 	-> p
 	-> Props (MetaTypes (Combine x y))
-Props i c &^ p = Props (i <> getInfoRecursive p) (toProp p : c)
+Props c &^ p = Props (toProp p : c)
 
 -- | Adds a property in reverted form.
 (!)
@@ -78,7 +78,7 @@ Props i c &^ p = Props (i <> getInfoRecursive p) (toProp p : c)
 	=> Props (MetaTypes x)
 	-> RevertableProperty (MetaTypes y) (MetaTypes z)
 	-> Props (MetaTypes (Combine x z))
-Props i c ! p = Props (i <> getInfoRecursive p) (c ++ [toProp (revert p)])
+Props c ! p = Props (c ++ [toProp (revert p)])
 
 {-
 
