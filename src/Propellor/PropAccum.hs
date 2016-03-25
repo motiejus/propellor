@@ -1,4 +1,9 @@
-{-# LANGUAGE PackageImports, FlexibleContexts #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE DataKinds #-}
 
 module Propellor.PropAccum
 	( host
@@ -12,11 +17,7 @@ module Propellor.PropAccum
 
 import Propellor.Types
 import Propellor.Types.MetaTypes
-import Propellor.Types.Core
 import Propellor.Property
-
-import Data.Monoid
-import Prelude
 
 -- | Defines a host and its properties.
 --
@@ -25,19 +26,24 @@ import Prelude
 -- > 	! oldproperty
 -- > 	& otherproperty
 host :: HostName -> Props metatypes -> Host
-host hn (Props ps) = Host hn ps (mconcat (map getInfoRecursive ps))
+host hn (Props i c) = Host hn c i
 
--- | Start accumulating a list of properties.
---
--- Properties can be added to it using `(&)` etc.
+-- | Props is a combination of a list of properties, with their combined 
+-- metatypes and info.
+data Props metatypes = Props Info [ChildProperty]
+
+-- | Start constructing a Props. Properties can then be added to it using
+-- `(&)` etc.
 props :: Props UnixLike
-props = Props []
+props = Props mempty []
 
 infixl 1 &
 infixl 1 &^
 infixl 1 !
 
-	getProperties :: h -> [ChildProperty]
+type family GetMetaTypes x
+type instance GetMetaTypes (Property (MetaTypes t)) = MetaTypes t
+type instance GetMetaTypes (RevertableProperty (MetaTypes t) undo) = MetaTypes t
 
 -- | Adds a property to a Props.
 --
@@ -45,46 +51,33 @@ infixl 1 !
 (&)
 	::
 		( IsProp p
-		-- -Wredundant-constraints is turned off because
-		-- this constraint appears redundant, but is actually
-		-- crucial.
 		, MetaTypes y ~ GetMetaTypes p
 		, CheckCombinable x y ~ 'CanCombine
 		)
 	=> Props (MetaTypes x)
 	-> p
 	-> Props (MetaTypes (Combine x y))
-Props c & p = Props (c ++ [toChildProperty p])
+Props i c & p = Props (i <> getInfoRecursive p) (c ++ [toProp p])
 
 -- | Adds a property before any other properties.
 (&^)
 	::
 		( IsProp p
-		-- -Wredundant-constraints is turned off because
-		-- this constraint appears redundant, but is actually
-		-- crucial.
 		, MetaTypes y ~ GetMetaTypes p
 		, CheckCombinable x y ~ 'CanCombine
 		)
 	=> Props (MetaTypes x)
 	-> p
 	-> Props (MetaTypes (Combine x y))
-Props c &^ p = Props (toChildProperty p : c)
+Props i c &^ p = Props (i <> getInfoRecursive p) (toProp p : c)
 
 -- | Adds a property in reverted form.
-(!) :: IsProp (RevertableProperty undometatypes setupmetatypes) => PropAccum h => h -> RevertableProperty setupmetatypes undometatypes -> h
-h ! p = h & revert p
-
-infixl 1 &
-infixl 1 &^
-infixl 1 !
-
-instance PropAccum Host where
-	(Host hn ps is) `addProp`  p = Host hn (ps ++ [toProp p])
-		(is <> getInfoRecursive p)
-	(Host hn ps is) `addPropFront` p = Host hn (toProp p : ps)
-		(getInfoRecursive p <> is)
-	getProperties = hostProperties
+(!)
+	:: (CheckCombinable x z ~ 'CanCombine)
+	=> Props (MetaTypes x)
+	-> RevertableProperty (MetaTypes y) (MetaTypes z)
+	-> Props (MetaTypes (Combine x z))
+Props i c ! p = Props (i <> getInfoRecursive p) (c ++ [toProp (revert p)])
 
 {-
 
