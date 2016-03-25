@@ -2,8 +2,9 @@
 {-# LANGUAGE DataKinds #-}
 
 module Propellor.Engine (
-	mainProperties,
+	-- mainProperties,
 	runPropellor,
+	ensureProperty,
 	ensureChildProperties,
 	fromHost,
 	fromHost',
@@ -30,6 +31,8 @@ import Propellor.Info
 import Propellor.Property
 import Utility.Exception
 
+{-
+
 -- | Gets the Properties of a Host, and ensures them all,
 -- with nice display of what's being done.
 mainProperties :: Host -> IO ()
@@ -42,6 +45,8 @@ mainProperties host = do
 		_ -> exitWith ExitSuccess
   where
 	ps = map ignoreInfo $ hostProperties host
+
+-}
 
 -- | Runs a Propellor action with the specified host.
 --
@@ -66,9 +71,7 @@ ensureChildProperties ps = ensure ps NoChange
 	ensure [] rs = return rs
 	ensure (p:ls) rs = do
 		hn <- asks hostName
-		r <- maybe (pure NoChange)
-			(actionMessageOn hn (getDesc p) . catchPropellor)
-			(getSatisfy p)
+		r <- actionMessageOn hn (getDesc p) (catchPropellor $ getSatisfy p)
 		ensure ls (r <> rs)
 
 -- | Lifts an action into the context of a different host.

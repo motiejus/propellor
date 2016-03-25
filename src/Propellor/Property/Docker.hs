@@ -182,6 +182,11 @@ imagePulled ctr = pulled `describe` msg
 propagateContainerInfo :: (IsProp (Property i)) => Container -> Property i -> Property HasInfo
 propagateContainerInfo ctr@(Container _ h) p = propagateContainer cn ctr p'
   where
+	p' = infoProperty
+		(propertyDesc p)
+		(getSatisfy p)
+		(propertyInfo p <> dockerinfo)
+		(propertyChildren p)
 	dockerinfo = dockerInfo $
 		mempty { _dockerContainers = M.singleton cn h }
 	cn = hostName h

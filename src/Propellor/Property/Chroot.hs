@@ -150,7 +150,7 @@ propagateChrootInfo c@(Chroot location _ _) p = propagateContainer location c p'
   where
 	p' = infoProperty
 		(propertyDesc p)
-		(propertySatisfy p)
+		(getSatisfy p)
 		(propertyInfo p <> chrootInfo c)
 		(propertyChildren p)
 

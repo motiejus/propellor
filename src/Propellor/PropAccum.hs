@@ -32,8 +32,9 @@ host hn (Props i c) = Host hn c i
 -- metatypes and info.
 data Props metatypes = Props Info [ChildProperty]
 
--- | Start constructing a Props. Properties can then be added to it using
--- `(&)` etc.
+-- | Start accumulating a list of properties.
+--
+-- Properties can be added to it using `(&)` etc.
 props :: Props UnixLike
 props = Props mempty []
 
@@ -98,7 +99,7 @@ propagateContainer
 propagateContainer containername c prop = Property
 	undefined
 	(propertyDesc prop)
-	(propertySatisfy prop)
+	(getSatisfy prop)
 	(propertyInfo prop)
 	(propertyChildren prop ++ hostprops)
   where
@@ -107,6 +108,6 @@ propagateContainer containername c prop = Property
 		let i = mapInfo (forceHostContext containername)
 			(propagatableInfo (propertyInfo p))
 		    cs = map go (propertyChildren p)
-		in infoProperty (propertyDesc p) (propertySatisfy p) i cs
+		in infoProperty (propertyDesc p) (getSatisfy p) i cs
 
 -}
