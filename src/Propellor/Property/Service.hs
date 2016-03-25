@@ -20,8 +20,8 @@ restarted = signaled "restart" "restarted"
 reloaded :: ServiceName -> Property DebianLike
 reloaded = signaled "reload" "reloaded"
 
-signaled :: String -> Desc -> ServiceName -> Property NoInfo
-signaled cmd desc svc = p `describe` (desc ++ " " ++ svc)
+signaled :: String -> Desc -> ServiceName -> Property DebianLike
+signaled cmd desc svc = tightenTargets $ p `describe` (desc ++ " " ++ svc)
   where
 	p = scriptProperty ["service " ++ shellEscape svc ++ " " ++ cmd ++ " >/dev/null 2>&1 || true"]
 		`assume` NoChange
