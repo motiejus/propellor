@@ -42,7 +42,7 @@ data NumClients = OnlyClient | MultipleClients
 -- Since obnam uses a fair amount of system resources, only one obnam
 -- backup job will be run at a time. Other jobs will wait their turns to
 -- run.
-backup :: FilePath -> Cron.Times -> [ObnamParam] -> NumClients -> Property NoInfo
+backup :: FilePath -> Cron.Times -> [ObnamParam] -> NumClients -> Property DebianLike
 backup dir crontimes params numclients =
 	backup' dir crontimes params numclients
 		`requires` restored dir params
@@ -155,5 +155,5 @@ keepParam ps = "--keep=" ++ intercalate "," (map go ps)
 isKeepParam :: ObnamParam -> Bool
 isKeepParam p = "--keep=" `isPrefixOf` p
 
-installed :: Property NoInfo
+installed :: Property DebianLike
 installed = Apt.installed ["obnam"]

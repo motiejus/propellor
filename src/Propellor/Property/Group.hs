@@ -5,7 +5,7 @@ import Propellor.Property.User (hasGroup)
 
 type GID = Int
 
-exists :: Group -> Maybe GID -> Property NoInfo
+exists :: Group -> Maybe GID -> Property UnixLike
 exists (Group group') mgid = check test (cmdProperty "addgroup" (args mgid))
 	`describe` unwords ["group", group']
   where
