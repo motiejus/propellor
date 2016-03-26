@@ -90,7 +90,7 @@ spin' mprivdata relay target hst = do
 		error "remote propellor failed"
   where
 	hn = fromMaybe target relay
-	sys = case getInfo (hostInfo hst) of
+	sys = case fromInfo (hostInfo hst) of
 		InfoVal o -> Just o
 		NoInfoVal -> Nothing
 
@@ -169,7 +169,7 @@ getSshTarget target hst
 					warningMessage $ "DNS seems out of date for " ++ target ++ " (" ++ why ++ "); using IP address from configuration instead."
 					return ip
 
-	configips = map val $ mapMaybe getIPAddr $
+	configips = map fromIPAddr $ mapMaybe getIPAddr $
 		S.toList $ fromDnsInfo $ fromInfo $ hostInfo hst
 
 -- Update the privdata, repo url, and git repo over the ssh

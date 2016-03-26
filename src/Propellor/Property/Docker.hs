@@ -183,9 +183,9 @@ propagateContainerInfo :: (IsProp (Property i)) => Container -> Property i -> Pr
 propagateContainerInfo ctr@(Container _ h) p = propagateContainer cn ctr p'
   where
 	p' = infoProperty
-		(propertyDesc p)
+		(getDesc p)
 		(getSatisfy p)
-		(propertyInfo p <> dockerinfo)
+		(getInfo p <> dockerinfo)
 		(propertyChildren p)
 	dockerinfo = dockerInfo $
 		mempty { _dockerContainers = M.singleton cn h }
@@ -198,7 +198,7 @@ mkContainerInfo cid@(ContainerId hn _cn) (Container img h) =
 	runparams = map (\(DockerRunParam mkparam) -> mkparam hn)
 		(_dockerRunParams info)
 	info = fromInfo $ hostInfo h'
-	h' = setContainerProps h $ containerProps h
+	h' = h
 		-- Restart by default so container comes up on
 		-- boot or when docker is upgraded.
 		&^ restartAlways

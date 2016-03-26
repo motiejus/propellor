@@ -243,7 +243,7 @@ mkUsedByMap = M.unionsWith (++) . map (\h -> mkPrivDataMap h $ const [hostName h
 mkPrivDataMap :: Host -> (Maybe PrivDataSourceDesc -> a) -> M.Map (PrivDataField, Context) a
 mkPrivDataMap host mkv = M.fromList $
 	map (\(f, d, c) -> ((f, mkHostContext c (hostName host)), mkv d))
-		(S.toList $ fromPrivInfo $ getInfo $ hostInfo host)
+		(S.toList $ fromPrivInfo $ fromInfo $ hostInfo host)
 
 setPrivDataTo :: PrivDataField -> Context -> PrivData -> IO ()
 setPrivDataTo field context (PrivData value) = do
