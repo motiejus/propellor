@@ -17,7 +17,7 @@ filesUnder d = Pattern (d ++ "/*")
 
 -- | Ensures that the Dest directory exists and has identical contents as
 -- the Src directory.
-syncDir :: Src -> Dest -> Property (DebianLike + ArchLinux)
+syncDir :: Src -> Dest -> Property DebianLike
 syncDir = syncDirFiltered []
 
 data Filter 
@@ -44,7 +44,7 @@ newtype Pattern = Pattern String
 -- Rsync checks each name to be transferred against its list of Filter
 -- rules, and the first matching one is acted on. If no matching rule
 -- is found, the file is processed.
-syncDirFiltered :: [Filter] -> Src -> Dest -> Property (DebianLike + ArchLinux)
+syncDirFiltered :: [Filter] -> Src -> Dest -> Property DebianLike
 syncDirFiltered filters src dest = rsync $
 	[ "-av"
 	-- Add trailing '/' to get rsync to sync the Dest directory,
@@ -57,7 +57,7 @@ syncDirFiltered filters src dest = rsync $
 	, "--quiet"
 	] ++ map toRsync filters
 
-rsync :: [String] -> Property (DebianLike + ArchLinux)
+rsync :: [String] -> Property DebianLike
 rsync ps = cmdProperty "rsync" ps
 	`assume` MadeChange
 	`requires` Apt.installed ["rsync"]

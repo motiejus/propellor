@@ -11,7 +11,7 @@ import Data.List
 -- using git-daemon, run from inetd.
 --
 -- Note that reverting this property does not remove or stop inetd.
-daemonRunning :: FilePath -> RevertableProperty NoInfo
+daemonRunning :: FilePath -> RevertableProperty DebianLike DebianLike
 daemonRunning exportdir = setup <!> unsetup
   where
 	setup = containsLine conf (mkl "tcp4")
@@ -80,7 +80,7 @@ cloned owner url dir mbranch = check originurl go
 			whenM (doesDirectoryExist dir) $
 				removeDirectoryRecursive dir
 			createDirectoryIfMissing True (takeDirectory dir)
-		ensureProperty $ userScriptProperty owner (catMaybes checkoutcmds)
+		ensureProperty w $ userScriptProperty owner (catMaybes checkoutcmds)
 			`assume` MadeChange
 	checkoutcmds = 
 		-- The </dev/null fixes an intermittent
@@ -122,7 +122,7 @@ bareRepo repo user gitshared = check (isRepo repo) $ propertyList ("git repo: " 
 	isRepo repo' = isNothing <$> catchMaybeIO (readProcess "git" ["rev-parse", "--resolve-git-dir", repo'])
 
 -- | Set a key value pair in a git repo's configuration.
-repoConfigured :: FilePath -> (String, String) -> Property NoInfo
+repoConfigured :: FilePath -> (String, String) -> Property UnixLike
 repo `repoConfigured` (key, value) = check (not <$> alreadyconfigured) $
 	userScriptProperty (User "root")
 		[ "cd " ++ repo
@@ -142,7 +142,7 @@ getRepoConfig repo key = catchDefaultIO [] $
 	lines <$> readProcess "git" ["-C", repo, "config", key]
 
 -- | Whether a repo accepts non-fast-forward pushes.
-repoAcceptsNonFFs :: FilePath -> RevertableProperty NoInfo
+repoAcceptsNonFFs :: FilePath -> RevertableProperty UnixLike UnixLike
 repoAcceptsNonFFs repo = accepts <!> refuses
   where
 	accepts = repoConfigured repo ("receive.denyNonFastForwards", "false")
@@ -153,7 +153,7 @@ repoAcceptsNonFFs repo = accepts <!> refuses
 
 -- | Sets a bare repository's default branch, which will be checked out
 -- when cloning it.
-bareRepoDefaultBranch :: FilePath -> String -> Property NoInfo
+bareRepoDefaultBranch :: FilePath -> String -> Property UnixLike
 bareRepoDefaultBranch repo branch =
 	userScriptProperty (User "root")
 		[ "cd " ++ repo

@@ -29,7 +29,7 @@ import qualified Propellor.Property.Network as Network
 installed :: Property DebianLike
 installed = Apt.installed ["iptables"]
 
-rule :: Chain -> Table -> Target -> Rules -> Property NoInfo
+rule :: Chain -> Table -> Target -> Rules -> Property Linux
 rule c tb tg rs = property ("firewall rule: " <> show r) addIpTable
   where
 	r = Rule c tb tg rs

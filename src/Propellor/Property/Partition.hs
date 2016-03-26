@@ -25,7 +25,7 @@ formatted = formatted' []
 -- Eg, ["-m0"]
 type MkfsOpts = [String]
 
-formatted' :: MkfsOpts -> Eep -> Fs -> FilePath -> Property NoInfo
+formatted' :: MkfsOpts -> Eep -> Fs -> FilePath -> Property DebianLike
 formatted' opts YesReallyFormatPartition fs dev = cmdProperty cmd opts'
 	`assume` MadeChange
 	`requires` Apt.installed [pkg]
@@ -65,18 +65,18 @@ isLoopDev' f
 -- within a disk image file. The resulting loop devices are passed to the
 -- property, which can operate on them. Always cleans up after itself,
 -- by removing the device maps after the property is run.
-kpartx :: FilePath -> ([LoopDev] -> Property NoInfo) -> Property NoInfo
+kpartx :: FilePath -> ([LoopDev] -> Property DebianLike) -> Property DebianLike
 kpartx diskimage mkprop = go `requires` Apt.installed ["kpartx"]
   where
 	go :: Property DebianLike
-	go = property' (getDesc (mkprop [])) $ \w -> do
+	go = property' (propertyDesc (mkprop [])) $ \w -> do
 		cleanup -- idempotency
 		loopdevs <- liftIO $ kpartxParse
 			<$> readProcess "kpartx" ["-avs", diskimage]
 		bad <- liftIO $ filterM (not <$$> isLoopDev) loopdevs
 		unless (null bad) $
 			error $ "kpartx output seems to include non-loop-devices (possible parse failure): " ++ show bad
-		r <- ensureProperty (mkprop loopdevs)
+		r <- ensureProperty w (mkprop loopdevs)
 		cleanup
 		return r
 	cleanup = void $ liftIO $ boolSystem "kpartx" [Param "-d", File diskimage]

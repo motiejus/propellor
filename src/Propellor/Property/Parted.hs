@@ -162,7 +162,6 @@ partitioned eep disk (PartTable tabletype parts) = property' desc $ \w -> do
 		& if isdev
 			then formatl (map (\n -> disk ++ show n) [1 :: Int ..])
 			else Partition.kpartx disk (formatl . map Partition.partitionLoopDev)
-		]
   where
 	desc = disk ++ " partitioned"
 	formatl devs = combineProperties desc (toProps $ map format (zip parts devs))
@@ -194,12 +193,12 @@ partitioned eep disk (PartTable tabletype parts) = property' desc $ \w -> do
 --
 -- Parted is run in script mode, so it will never prompt for input.
 -- It is asked to use cylinder alignment for the disk.
-parted :: Eep -> FilePath -> [String] -> Property NoInfo
+parted :: Eep -> FilePath -> [String] -> Property DebianLike
 parted YesReallyDeleteDiskContents disk ps = p `requires` installed
   where
 	p = cmdProperty "parted" ("--script":"--align":"cylinder":disk:ps)
 		`assume` MadeChange
 
 -- | Gets parted installed.
-installed :: Property (DebianLike + ArchLinux)
-installed = Apt.installed ["parted"] `pickOS` Pacman.installed ["parted"]
+installed :: Property DebianLike
+installed = Apt.installed ["parted"]

@@ -79,9 +79,9 @@ hasPrivContent :: IsContext c => FilePath -> c -> Property (HasInfo + UnixLike)
 hasPrivContent f = hasPrivContentFrom (PrivDataSourceFile (PrivFile f) f) f
 
 -- | Like hasPrivContent, but allows specifying a source
--- for PrivData, rather than using `PrivDataSourceFile`.
+-- for PrivData, rather than using PrivDataSourceFile .
 hasPrivContentFrom :: (IsContext c, IsPrivDataSource s) => s -> FilePath -> c -> Property (HasInfo + UnixLike)
-hasPrivContentFrom = hasPrivContent' ProtectedWrite
+hasPrivContentFrom = hasPrivContent' writeFileProtected
 
 -- | Leaves the file at its default or current mode,
 -- allowing "private" data to be read.
@@ -91,10 +91,10 @@ hasPrivContentExposed :: IsContext c => FilePath -> c -> Property (HasInfo + Uni
 hasPrivContentExposed f = hasPrivContentExposedFrom (PrivDataSourceFile (PrivFile f) f) f
 
 hasPrivContentExposedFrom :: (IsContext c, IsPrivDataSource s) => s -> FilePath -> c -> Property (HasInfo + UnixLike)
-hasPrivContentExposedFrom = hasPrivContent' NormalWrite
+hasPrivContentExposedFrom = hasPrivContent' writeFile
 
-hasPrivContent' :: (IsContext c, IsPrivDataSource s) => FileWriteMode -> s -> FilePath -> c -> Property (HasInfo + UnixLike)
-hasPrivContent' writemode source f context = 
+hasPrivContent' :: (IsContext c, IsPrivDataSource s) => (FilePath -> String -> IO ()) -> s -> FilePath -> c -> Property (HasInfo + UnixLike)
+hasPrivContent' writer source f context = 
 	withPrivData source context $ \getcontent -> 
 		property' desc $ \o -> getcontent $ \privcontent -> 
 			ensureProperty o $ fileProperty' writer desc
