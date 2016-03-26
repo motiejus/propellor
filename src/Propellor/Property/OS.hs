@@ -64,7 +64,7 @@ import Control.Exception (throw)
 -- > & User.accountFor "joey"
 -- > & User.hasSomePassword "joey"
 -- > -- rest of system properties here
-cleanInstallOnce :: Confirmation -> Property DebianLike
+cleanInstallOnce :: Confirmation -> Property Linux
 cleanInstallOnce confirmation = check (not <$> doesFileExist flagfile) $
 	go `requires` confirmed "clean install confirmed" confirmation
   where
@@ -83,12 +83,16 @@ cleanInstallOnce confirmation = check (not <$> doesFileExist flagfile) $
 			`requires`
 		osbootstrapped
 
-	osbootstrapped = withOS (newOSDir ++ " bootstrapped") $ \o -> case o of
-		(Just d@(System (Debian _) _)) -> debootstrap d
-		(Just u@(System (Buntish _) _)) -> debootstrap u
+	osbootstrapped :: Property Linux
+	osbootstrapped = withOS (newOSDir ++ " bootstrapped") $ \w o -> case o of
+		(Just d@(System (Debian _) _)) -> ensureProperty w $
+			debootstrap d
+		(Just u@(System (Buntish _) _)) -> ensureProperty w $
+			debootstrap u
 		_ -> unsupportedOS
 	
-	debootstrap targetos = ensureProperty $
+	debootstrap :: System -> Property Linux
+	debootstrap targetos =
 		-- Ignore the os setting, and install debootstrap from
 		-- source, since we don't know what OS we're running in yet.
 		Debootstrap.built' Debootstrap.sourceInstall
@@ -146,7 +150,7 @@ cleanInstallOnce confirmation = check (not <$> doesFileExist flagfile) $
 		--   git repo url, which all need to be arranged to
 		--   be present in /old-os's /usr/local/propellor)
 		-- TODO
-
+	
 	finalized :: Property UnixLike
 	finalized = property "clean OS installed" $ do
 		liftIO $ writeFile flagfile ""
@@ -225,7 +229,8 @@ preserveRootSshAuthorized :: Property UnixLike
 preserveRootSshAuthorized = check (fileExist oldloc) $
 	property' desc $ \w -> do
 		ks <- liftIO $ lines <$> readFile oldloc
-		ensureProperties (map (setupRevertableProperty . Ssh.authorizedKey (User "root")) ks)
+		ensureProperty w $ combineProperties desc $
+			toProps $ map (setupRevertableProperty . Ssh.authorizedKey (User "root")) ks
   where
 	desc = newloc ++ " copied from old OS"
 	newloc = "/root/.ssh/authorized_keys"

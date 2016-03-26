@@ -8,8 +8,8 @@ module Propellor.Property.Reboot (
 
 import Propellor.Base
 
-now :: Property NoInfo
-now = cmdProperty "reboot" []
+now :: Property Linux
+now = tightenTargets $ cmdProperty "reboot" []
 	`assume` MadeChange
 	`describe` "reboot now"
 
@@ -22,7 +22,7 @@ type Force = Bool
 --
 -- The reboot can be forced to run, which bypasses the init system. Useful
 -- if the init system might not be running for some reason.
-atEnd :: Force -> (Result -> Bool) -> Property Linux
+atEnd :: Bool -> (Result -> Bool) -> Property Linux
 atEnd force resultok = property "scheduled reboot at end of propellor run" $ do
 	endAction "rebooting" atend
 	return NoChange
