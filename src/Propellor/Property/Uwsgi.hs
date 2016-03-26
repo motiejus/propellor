@@ -11,7 +11,7 @@ type ConfigFile = [String]
 
 type AppName = String
 
-appEnabled :: AppName -> ConfigFile -> RevertableProperty NoInfo
+appEnabled :: AppName -> ConfigFile -> RevertableProperty DebianLike DebianLike
 appEnabled an cf = enable <!> disable
   where
 	enable = appVal an `File.isSymlinkedTo` appValRelativeCfg an

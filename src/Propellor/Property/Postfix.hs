@@ -32,7 +32,9 @@ satellite :: Property DebianLike
 satellite = check (not <$> mainCfIsSet "relayhost") setup
 	`requires` installed
   where
-	setup = property "postfix satellite system" $ do
+	desc = "postfix satellite system"
+	setup :: Property DebianLike
+	setup = property' desc $ \w -> do
 		hn <- asks hostName
 		let (_, domain) = separate (== '.') hn
 		ensureProperty w $ combineProperties desc $ props
@@ -58,7 +60,7 @@ mappedFile f setup = setup f
 
 -- | Run newaliases command, which should be done after changing
 -- @/etc/aliases@.
-newaliases :: Property NoInfo
+newaliases :: Property UnixLike
 newaliases = check ("/etc/aliases" `isNewerThan` "/etc/aliases.db")
 	(cmdProperty "newaliases" [])
 
@@ -251,7 +253,7 @@ parseServiceLine l = Service
 	nws = length ws
 
 -- | Enables a `Service` in postfix's `masterCfFile`.
-service :: Service -> RevertableProperty NoInfo
+service :: Service -> RevertableProperty DebianLike DebianLike
 service s = (enable <!> disable)
 	`describe` desc
   where
@@ -275,7 +277,7 @@ service s = (enable <!> disable)
 -- It would be wise to enable fail2ban, for example:
 --
 -- > Fail2Ban.jailEnabled "postfix-sasl"
-saslAuthdInstalled :: Property NoInfo
+saslAuthdInstalled :: Property DebianLike
 saslAuthdInstalled = setupdaemon
 	`requires` Service.running "saslauthd"
 	`requires` postfixgroup

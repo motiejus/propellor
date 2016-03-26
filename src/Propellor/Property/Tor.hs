@@ -53,14 +53,14 @@ named n = configured [("Nickname", n')]
   where
 	n' = saneNickname n
 
-torPrivKey :: Context -> Property HasInfo
+torPrivKey :: Context -> Property (HasInfo + DebianLike)
 torPrivKey context = f `File.hasPrivContent` context
 	`onChange` File.ownerGroup f user (userGroup user)
 	`requires` torPrivKeyDirExists
   where
 	f = torPrivKeyDir </> "secret_id_key"
 
-torPrivKeyDirExists :: Property NoInfo
+torPrivKeyDirExists :: Property DebianLike
 torPrivKeyDirExists = File.dirExists torPrivKeyDir
 	`onChange` setperms
 	`requires` installed
@@ -79,7 +79,7 @@ server = configured [("SocksPort", "0")]
 	`requires` Apt.installed ["ntp"]
 	`describe` "tor server"
 
-installed :: Property NoInfo
+installed :: Property DebianLike
 installed = Apt.installed ["tor"]
 
 -- | Specifies configuration settings. Any lines in the config file
@@ -119,16 +119,18 @@ bandwidthRate' s divby = case readSize dataUnits s of
 			`describe` ("tor BandwidthRate " ++ v)
 	Nothing -> property ("unable to parse " ++ s) noChange
 
--- | Enables a hidden service for a given port.
---
--- If used without `hiddenServiceData`, tor will generate a new
--- private key.
-hiddenService :: HiddenServiceName -> Port -> Property DebianLike
-hiddenService hn port = hiddenService' hn [port]
+hiddenServiceAvailable :: HiddenServiceName -> Int -> Property DebianLike
+hiddenServiceAvailable hn port = hiddenServiceHostName $ hiddenService hn port
+  where
+	hiddenServiceHostName p =  adjustPropertySatisfy p $ \satisfy -> do
+		r <- satisfy
+		h <- liftIO $ readFile (varLib </> hn </> "hostname")
+		warningMessage $ unwords ["hidden service hostname:", h]
+		return r
 
-hiddenService' :: HiddenServiceName -> [Port] -> Property DebianLike
-hiddenService' hn ports = ConfFile.adjustSection
-	(unwords ["hidden service", hn, "available on ports", intercalate "," (map val ports')])
+hiddenService :: HiddenServiceName -> Int -> Property DebianLike
+hiddenService hn port = ConfFile.adjustSection
+	(unwords ["hidden service", hn, "available on port", show port])
 	(== oniondir)
 	(not . isPrefixOf "HiddenServicePort")
 	(const (oniondir : onionports))
@@ -141,23 +143,6 @@ hiddenService' hn ports = ConfFile.adjustSection
 	ports' = sort ports
 	onionport port = unwords ["HiddenServicePort", val port, "127.0.0.1:" ++ val port]
 
--- | Same as `hiddenService` but also causes propellor to display
--- the onion address of the hidden service.
-hiddenServiceAvailable :: HiddenServiceName -> Port -> Property DebianLike
-hiddenServiceAvailable hn port = hiddenServiceAvailable' hn [port]
-
-hiddenServiceAvailable' :: HiddenServiceName -> [Port] -> Property DebianLike
-hiddenServiceAvailable' hn ports = hiddenServiceHostName $ hiddenService' hn ports
-  where
-	hiddenServiceHostName p =  adjustPropertySatisfy p $ \satisfy -> do
-		r <- satisfy
-		mh <- liftIO $ tryIO $ readFile (varLib </> hn </> "hostname")
-		case mh of
-			Right h -> infoMessage ["hidden service hostname:", h]
-			Left _e -> warningMessage "hidden service hostname not available yet"
-		return r
-
--- | Load the private key for a hidden service from the privdata.
 hiddenServiceData :: IsContext c => HiddenServiceName -> c -> Property (HasInfo + DebianLike)
 hiddenServiceData hn context = combineProperties desc $ props
 	& installonion "hostname"
