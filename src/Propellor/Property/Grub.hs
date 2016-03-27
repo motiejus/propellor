@@ -29,11 +29,14 @@ mkConfig = tightenTargets $ cmdProperty "update-grub" []
 	`assume` MadeChange
 
 -- | Installs grub; does not run update-grub.
-installed' :: BIOS -> Property DebianLike
-installed' bios = Apt.installed [pkg] `describe` "grub package installed"
+installed' :: BIOS -> Property Linux
+installed' bios = withOS "grub package installed" $ \w o -> 
+	let apt = ensureProperty w (Apt.installed [debpkg])
+	in case o of
+		(Just (System (Debian _) _)) -> apt
+		(Just (System (Buntish _) _)) -> apt
+		_ -> unsupportedOS
   where
-	aptinstall :: Property DebianLike
-	aptinstall = Apt.installed [debpkg]
 	debpkg = case bios of
 		PC -> "grub-pc"
 		EFI64 -> "grub-efi-amd64"
