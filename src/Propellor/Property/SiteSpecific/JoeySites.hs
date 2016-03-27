@@ -98,11 +98,7 @@ oldUseNetServer hosts = propertyList "olduse.net server" $ props
 	& Apt.installed ["leafnode"]
 	& oldUseNetInstalled "oldusenet-server"
 	& oldUseNetBackup
-	& check (not . isSymbolicLink <$> getSymbolicLinkStatus newsspool)
-		(property "olduse.net spool in place" $ makeChange $ do
-			removeDirectoryRecursive newsspool
-			createSymbolicLink (datadir </> "news") newsspool
-		)
+	& spoolsymlink
 	& "/etc/news/leafnode/config" `File.hasContent` 
 		[ "# olduse.net configuration (deployed by propellor)"
 		, "expire = 1000000" -- no expiry via texpire
@@ -134,7 +130,7 @@ oldUseNetServer hosts = propertyList "olduse.net server" $ props
 		, Apache.allowAll
 		, "  </Directory>"
 		]
-
+	
 	spoolsymlink :: Property UnixLike
 	spoolsymlink = check (not . isSymbolicLink <$> getSymbolicLinkStatus newsspool)
 		(property "olduse.net spool in place" $ makeChange $ do
@@ -177,7 +173,7 @@ oldUseNetInstalled pkg = check (not <$> Apt.isInstalled pkg) $
 			]
 			`assume` MadeChange
 			`describe` "olduse.net built"
-
+ 
 kgbServer :: Property (HasInfo + Debian)
 kgbServer = propertyList desc $ props
 	& installed
@@ -187,7 +183,7 @@ kgbServer = propertyList desc $ props
 	desc = "kgb.kitenet.net setup"
 	installed :: Property Debian
 	installed = withOS desc $ \w o -> case o of
-		(Just (System (Debian _ Unstable) _)) ->
+		(Just (System (Debian Unstable) _)) ->
 			ensureProperty w $ propertyList desc $ props
 				& Apt.serviceInstalledRunning "kgb-bot"
 				& "/etc/default/kgb-bot" `File.containsLine` "BOT_ENABLED=1"
@@ -321,7 +317,7 @@ annexWebSite origin hn uuid remotes = propertyList (hn ++" website using git-ann
 		, "  </Directory>"
 		]
 
-apacheSite :: HostName -> Bool -> Apache.ConfigFile -> RevertableProperty NoInfo
+apacheSite :: HostName -> Bool -> Apache.ConfigFile -> RevertableProperty DebianLike DebianLike
 apacheSite hn withssl middle = Apache.siteEnabled hn $ apachecfg hn withssl middle
 
 apachecfg :: HostName -> Bool -> Apache.ConfigFile -> Apache.ConfigFile
@@ -361,7 +357,7 @@ mainhttpscert True =
 	, "  SSLCertificateChainFile /etc/ssl/certs/startssl.pem"
 	]
 		
-gitAnnexDistributor :: Property HasInfo
+gitAnnexDistributor :: Property (HasInfo + DebianLike)
 gitAnnexDistributor = combineProperties "git-annex distributor, including rsync server and signer" $ props
 	& Apt.installed ["rsync"]
 	& File.hasPrivContent "/etc/rsyncd.conf" (Context "git-annex distributor")
@@ -388,7 +384,7 @@ downloads hosts = annexWebSite "/srv/git/downloads.git"
 	[("eubackup", "ssh://eubackup.kitenet.net/~/lib/downloads/")]
 	`requires` Ssh.knownHost hosts "eubackup.kitenet.net" (User "joey")
 	
-tmp :: Property HasInfo
+tmp :: Property (HasInfo + DebianLike)
 tmp = propertyList "tmp.kitenet.net" $ props
 	& annexWebSite "/srv/git/joey/tmp.git"
 		"tmp.joeyh.name"
@@ -397,7 +393,7 @@ tmp = propertyList "tmp.kitenet.net" $ props
 	& pumpRss
 
 -- Twitter, you kill us.
-twitRss :: Property HasInfo
+twitRss :: Property DebianLike
 twitRss = combineProperties "twitter rss" $ props
 	& Git.cloned (User "joey") "git://git.kitenet.net/twitrss.git" dir Nothing
 	& check (not <$> doesFileExist (dir </> "twitRss")) compiled
@@ -420,10 +416,9 @@ twitRss = combineProperties "twitter rss" $ props
 			]
 
 -- Work around for expired ssl cert.
--- (Obsolete; need to revert this.)
 pumpRss :: Property DebianLike
-pumpRss = Cron.job "pump rss" (Cron.Times "15 * * * *") (User "joey") "/srv/web/tmp.joeyh.name/"
-	"wget https://pump2rss.com/feed/joeyh@identi.ca.atom -O pump.atom.new --no-check-certificate 2>/dev/null; sed 's/ & / /g' pump.atom.new > pump.atom"
+pumpRss = Cron.job "pump rss" (Cron.Times "15 * * * *") (User "joey") "/srv/web/tmp.kitenet.net/"
+	"wget https://rss.io.jpope.org/feed/joeyh@identi.ca.atom -O pump.atom.new --no-check-certificate 2>/dev/null; sed 's/ & / /g' pump.atom.new > pump.atom"
 
 ircBouncer :: Property (HasInfo + DebianLike)
 ircBouncer = propertyList "IRC bouncer" $ props
@@ -466,7 +461,7 @@ githubBackup = propertyList "github-backup box" $ props
 		, "github-backup joeyh"
 		]
 
-githubKeys :: Property HasInfo
+githubKeys :: Property (HasInfo + UnixLike)
 githubKeys = 
 	let f = "/home/joey/.github-keys"
 	in File.hasPrivContent f anyContext
@@ -486,7 +481,7 @@ githubMirrors =
   where
 	plzuseurl u = "Please submit changes to " ++ u ++ " instead of using github pull requests, which are not part of my workflow. Just open a todo item there and link to a git repository containing your changes. Did you know, git is a distributed system? The git repository doesn't even need to be on github! Please send any complaints to Github; they don't allow turning off pull requests or redirecting them elsewhere.  -- A robot acting on behalf of Joey Hess"
 
-rsyncNetBackup :: [Host] -> Property NoInfo
+rsyncNetBackup :: [Host] -> Property DebianLike
 rsyncNetBackup hosts = Cron.niceJob "rsync.net copied in daily" (Cron.Times "30 5 * * *")
 	(User "joey") "/home/joey/lib/backup" "mkdir -p rsync.net && rsync --delete -az 2318@usw-s002.rsync.net: rsync.net"
 	`requires` Ssh.knownHost hosts "usw-s002.rsync.net" (User "joey")
@@ -713,7 +708,7 @@ kiteMailServer = propertyList "kitenet.net mail server" $ props
 
 -- Configures postfix to relay outgoing mail to kitenet.net, with
 -- verification via tls cert.
-postfixClientRelay :: Context -> Property HasInfo
+postfixClientRelay :: Context -> Property (HasInfo + DebianLike)
 postfixClientRelay ctx = Postfix.mainCfFile `File.containsLines`
 	-- Using smtps not smtp because more networks firewall smtp
 	[ "relayhost = kitenet.net:smtps"
@@ -774,6 +769,15 @@ hasPostfixCert :: Context -> Property (HasInfo + UnixLike)
 hasPostfixCert ctx = combineProperties "postfix tls cert installed" $ props
 	& "/etc/ssl/certs/postfix.pem" `File.hasPrivContentExposed` ctx
 	& "/etc/ssl/private/postfix.pem" `File.hasPrivContent` ctx
+
+kitenetHttps :: Property (HasInfo + DebianLike)
+kitenetHttps = propertyList "kitenet.net https certs" $ props
+	& File.hasPrivContent "/etc/ssl/certs/web.pem" ctx
+	& File.hasPrivContent "/etc/ssl/private/web.pem" ctx
+	& File.hasPrivContent "/etc/ssl/certs/startssl.pem" ctx
+	& Apache.modEnabled "ssl"
+  where
+	ctx = Context "kitenet.net"
 
 -- Legacy static web sites and redirections from kitenet.net to newer
 -- sites.
@@ -945,7 +949,7 @@ legacyWebSites = propertyList "legacy web sites" $ props
 		, "rewriterule (.*) http://joeyh.name$1 [r]"
 		]
 
-userDirHtml :: Property NoInfo
+userDirHtml :: Property DebianLike
 userDirHtml = File.fileProperty "apache userdir is html" (map munge) conf
 	`onChange` Apache.reloaded
 	`requires` Apache.modEnabled "userdir"
@@ -957,10 +961,9 @@ userDirHtml = File.fileProperty "apache userdir is html" (map munge) conf
 -- <http://joeyh.name/blog/entry/a_programmable_alarm_clock_using_systemd/>
 --
 -- oncalendar example value: "*-*-* 7:30"
-alarmClock :: String -> User -> String -> Property NoInfo
-alarmClock oncalendar (User user) command = combineProperties
-	"goodmorning timer installed"
-	[ "/etc/systemd/system/goodmorning.timer" `File.hasContent`
+alarmClock :: String -> User -> String -> Property DebianLike
+alarmClock oncalendar (User user) command = combineProperties "goodmorning timer installed" $ props
+	& "/etc/systemd/system/goodmorning.timer" `File.hasContent`
 		[ "[Unit]"
 		, "Description=good morning"
 		, ""
@@ -975,7 +978,7 @@ alarmClock oncalendar (User user) command = combineProperties
 		]
 		`onChange` (Systemd.daemonReloaded
 			`before` Systemd.restarted "goodmorning.timer")
-	, "/etc/systemd/system/goodmorning.service" `File.hasContent`
+	& "/etc/systemd/system/goodmorning.service" `File.hasContent`
 		[ "[Unit]"
 		, "Description=good morning"
 		, "RefuseManualStart=true"
@@ -988,8 +991,7 @@ alarmClock oncalendar (User user) command = combineProperties
 		, "ExecStart=/bin/systemd-inhibit --what=handle-lid-switch --why=goodmorning /bin/su " ++ user ++ " -c \"" ++ command ++ "\""
 		]
 		`onChange` Systemd.daemonReloaded
-	, Systemd.enabled "goodmorning.timer"
-	, Systemd.started "goodmorning.timer"
-	, "/etc/systemd/logind.conf" `ConfFile.containsIniSetting`
+	& Systemd.enabled "goodmorning.timer"
+	& Systemd.started "goodmorning.timer"
+	& "/etc/systemd/logind.conf" `ConfFile.containsIniSetting`
 		("Login", "LidSwitchIgnoreInhibited", "no")
-	]
