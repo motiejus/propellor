@@ -74,12 +74,12 @@ installed = Apt.installed ["docker.io"]
 
 -- | Configures docker with an authentication file, so that images can be
 -- pushed to index.docker.io. Optional.
-configured :: Property DebianLike
+configured :: Property (HasInfo + DebianLike)
 configured = prop `requires` installed
   where
 	prop :: Property (HasInfo + DebianLike)
 	prop = withPrivData src anyContext $ \getcfg ->
-		property "docker configured" $ getcfg $ \cfg -> ensureProperty $
+		property' "docker configured" $ \w -> getcfg $ \cfg -> ensureProperty w $
 			"/root/.dockercfg" `File.hasContent` privDataLines cfg
 	src = PrivDataSourceFileFromCommand DockerAuthentication
 		"/root/.dockercfg" "docker login"
@@ -95,7 +95,6 @@ data Container = Container Image Host
 instance IsContainer Container where
 	containerProperties (Container _ h) = containerProperties h
 	containerInfo (Container _ h) = containerInfo h
-	setContainerProperties (Container i h) ps = Container i (setContainerProperties h ps)
 
 class HasImage a where
 	getImageName :: a -> Image
@@ -113,7 +112,7 @@ instance HasImage Container where
 -- >    & publish "80:80"
 -- >    & Apt.installed {"apache2"]
 -- >    & ...
-container :: ContainerName -> Image -> Props -> Container
+container :: ContainerName -> Image -> Props metatypes -> Container
 container cn image (Props ps) = Container image (Host cn ps info)
   where
 	info = dockerInfo mempty <> mconcat (map getInfoRecursive ps)
@@ -128,7 +127,7 @@ container cn image (Props ps) = Container image (Host cn ps info)
 --
 -- Reverting this property ensures that the container is stopped and
 -- removed.
-docked :: Container -> RevertableProperty HasInfo
+docked :: Container -> RevertableProperty (HasInfo + Linux) (HasInfo + Linux)
 docked ctr@(Container _ h) =
 	(propagateContainerInfo ctr (go "docked" setup))
 		<!>
@@ -139,7 +138,7 @@ docked ctr@(Container _ h) =
 	go desc a = property' (desc ++ " " ++ cn) $ \w -> do
 		hn <- asks hostName
 		let cid = ContainerId hn cn
-		ensureChildProperties [a cid (mkContainerInfo cid ctr)]
+		ensureProperty w $ a cid (mkContainerInfo cid ctr)
 
 	setup :: ContainerId -> ContainerInfo -> Property Linux
 	setup cid (ContainerInfo image runparams) =
@@ -162,31 +161,31 @@ docked ctr@(Container _ h) =
 
 -- | Build the image from a directory containing a Dockerfile.
 imageBuilt :: HasImage c => FilePath -> c -> Property Linux
-imageBuilt directory ctr = describe built msg
+imageBuilt directory ctr = built `describe` msg
   where
 	msg = "docker image " ++ (imageIdentifier image) ++ " built from " ++ directory
-	built = Cmd.cmdProperty' dockercmd ["build", "--tag", imageIdentifier image, "./"] workDir
-		`assume` MadeChange
+	built :: Property Linux
+	built = tightenTargets $
+		Cmd.cmdProperty' dockercmd ["build", "--tag", imageIdentifier image, "./"] workDir
+			`assume` MadeChange
 	workDir p = p { cwd = Just directory }
 	image = getImageName ctr
 
 -- | Pull the image from the standard Docker Hub registry.
 imagePulled :: HasImage c => c -> Property Linux
-imagePulled ctr = describe pulled msg
+imagePulled ctr = pulled `describe` msg
   where
 	msg = "docker image " ++ (imageIdentifier image) ++ " pulled"
-	pulled = Cmd.cmdProperty dockercmd ["pull", imageIdentifier image]
-		`assume` MadeChange
+	pulled :: Property Linux
+	pulled = tightenTargets $ 
+		Cmd.cmdProperty dockercmd ["pull", imageIdentifier image]
+			`assume` MadeChange
 	image = getImageName ctr
 
-propagateContainerInfo :: (IsProp (Property i)) => Container -> Property i -> Property (HasInfo + Linux)
-propagateContainerInfo ctr@(Container _ h) p = propagateContainer cn ctr p'
+propagateContainerInfo :: Container -> Property (HasInfo + Linux) -> Property (HasInfo + Linux)
+propagateContainerInfo ctr@(Container _ h) p = propagateContainer cn ctr $
+	p `addInfoProperty'` dockerinfo
   where
-	p' = infoProperty
-		(getDesc p)
-		(getSatisfy p)
-		(getInfo p <> dockerinfo)
-		(propertyChildren p)
 	dockerinfo = dockerInfo $
 		mempty { _dockerContainers = M.singleton cn h }
 	cn = hostName h
@@ -198,7 +197,7 @@ mkContainerInfo cid@(ContainerId hn _cn) (Container img h) =
 	runparams = map (\(DockerRunParam mkparam) -> mkparam hn)
 		(_dockerRunParams info)
 	info = fromInfo $ hostInfo h'
-	h' = h
+	h' = modifyHostProps h $ hostProps h
 		-- Restart by default so container comes up on
 		-- boot or when docker is upgraded.
 		&^ restartAlways
@@ -233,7 +232,7 @@ garbageCollected = propertyList "docker garbage collected" $ props
 -- the pam config, to work around <https://github.com/docker/docker/issues/5663>
 -- which affects docker 1.2.0.
 tweaked :: Property Linux
-tweaked = cmdProperty "sh"
+tweaked = tightenTargets $ cmdProperty "sh"
 	[ "-c"
 	, "sed -ri 's/^session\\s+required\\s+pam_loginuid.so$/session optional pam_loginuid.so/' /etc/pam.d/*"
 	]
@@ -247,9 +246,10 @@ tweaked = cmdProperty "sh"
 --
 -- Only takes effect after reboot. (Not automated.)
 memoryLimited :: Property DebianLike
-memoryLimited = "/etc/default/grub" `File.containsLine` cfg
-	`describe` "docker memory limited"
-	`onChange` (cmdProperty "update-grub" [] `assume` MadeChange)
+memoryLimited = tightenTargets $
+	"/etc/default/grub" `File.containsLine` cfg
+		`describe` "docker memory limited"
+		`onChange` (cmdProperty "update-grub" [] `assume` MadeChange)
   where
 	cmdline = "cgroup_enable=memory swapaccount=1"
 	cfg = "GRUB_CMDLINE_LINUX_DEFAULT=\""++cmdline++"\""
@@ -363,7 +363,7 @@ volumes_from cn = genProp "volumes-from" $ \hn ->
 	fromContainerId (ContainerId hn cn)
 
 -- | Work dir inside the container.
-workdir :: String -> Property HasInfo
+workdir :: String -> Property (HasInfo + Linux)
 workdir = runProp "workdir"
 
 -- | Memory limit for container.
@@ -606,10 +606,9 @@ startContainer :: ContainerId -> IO Bool
 startContainer cid = boolSystem dockercmd [Param "start", Param $ fromContainerId cid ]
 
 stoppedContainer :: ContainerId -> Property Linux
-stoppedContainer cid = containerDesc cid $ property' desc $ \o ->
+stoppedContainer cid = containerDesc cid $ property' desc $ \w ->
 	ifM (liftIO $ elem cid <$> listContainers RunningContainers)
-		( liftIO cleanup `after` ensureProperty o
-			(property desc $ liftIO $ toResult <$> stopContainer cid)
+		( liftIO cleanup `after` ensureProperty w stop
 		, return NoChange
 		)
   where
@@ -660,7 +659,7 @@ listImages :: IO [ImageUID]
 listImages = map ImageUID . lines <$> readProcess dockercmd ["images", "--all", "--quiet"]
 
 runProp :: String -> RunParam -> Property (HasInfo + Linux)
-runProp field v = tightenTargets $ pureInfoProperty (param) $
+runProp field val = tightenTargets $ pureInfoProperty (param) $
 	mempty { _dockerRunParams = [DockerRunParam (\_ -> "--"++param)] }
   where
 	param = field++"="++v
