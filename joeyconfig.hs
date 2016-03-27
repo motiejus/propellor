@@ -193,13 +193,13 @@ orca = host "orca.kitenet.net" $ props
 
 	& Systemd.nspawned (GitAnnexBuilder.autoBuilderContainer
 		GitAnnexBuilder.standardAutoBuilder
-		(System (Debian Unstable) "amd64") Nothing (Cron.Times "15 * * * *") "2h")
+		Unstable "amd64" Nothing (Cron.Times "15 * * * *") "2h")
 	& Systemd.nspawned (GitAnnexBuilder.autoBuilderContainer
 		GitAnnexBuilder.standardAutoBuilder
-		(System (Debian Unstable) "i386") Nothing (Cron.Times "30 * * * *") "2h")
+		Unstable "i386") Nothing (Cron.Times "30 * * * *") "2h")
 	& Systemd.nspawned (GitAnnexBuilder.autoBuilderContainer
 		GitAnnexBuilder.stackAutoBuilder
-		(System (Debian (Stable "jessie")) "i386") (Just "ancient") (Cron.Times "45 * * * *") "2h")
+		(Stable "jessie") "i386" (Just "ancient") (Cron.Times "45 * * * *") "2h")
 	& Systemd.nspawned (GitAnnexBuilder.androidAutoBuilderContainer
 		(Cron.Times "1 1 * * *") "3h")
 
@@ -233,14 +233,7 @@ honeybee = standardSystem "honeybee.kitenet.net" Testing "armhf"
 	-- Runs only on weekdays.
 	& Systemd.nspawned (GitAnnexBuilder.autoBuilderContainer
 		GitAnnexBuilder.armAutoBuilder
-		Unstable ARMEL Nothing weekends "23h")
-	-- Runs only on weekends.
-	& Systemd.nspawned (GitAnnexBuilder.autoBuilderContainer
-		GitAnnexBuilder.stackAutoBuilder
-		(Stable "jessie") ARMEL (Just "ancient") weekdays "23h")
-  where
-	weekdays = Cron.Times "15 6 * * 2-5"
-	weekends = Cron.Times "15 6 * * 6-7"
+			Unstable "armel" Nothing Cron.Daily "22h")
 
 -- This is not a complete description of kite, since it's a
 -- multiuser system with eg, user passwords that are not deployed

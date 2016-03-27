@@ -25,9 +25,7 @@ builddir = gitbuilderdir </> "build"
 
 type TimeOut = String -- eg, 5h
 
-type ArchString = String
-
-autobuilder :: ArchString -> Times -> TimeOut -> Property (HasInfo + DebianLike)
+autobuilder :: Architecture -> Times -> TimeOut -> Property (HasInfo + DebianLike)
 autobuilder arch crontimes timeout = combineProperties "gitannexbuilder" $ props
 	& Apt.serviceInstalledRunning "cron"
 	& Cron.niceJob "gitannexbuilder" crontimes (User builduser) gitbuilderdir
@@ -49,7 +47,7 @@ autobuilder arch crontimes timeout = combineProperties "gitannexbuilder" $ props
 				then makeChange $ writeFile pwfile want
 				else noChange
 
-tree :: ArchString -> Flavor -> Property DebianLike
+tree :: Architecture -> Flavor -> Property DebianLike
 tree buildarch flavor = combineProperties "gitannexbuilder tree" $ props
 	& Apt.installed ["git"]
 	& File.dirExists gitbuilderdir
@@ -87,7 +85,7 @@ buildDepsNoHaskellLibs = Apt.installed
 	]
 
 haskellPkgsInstalled :: String -> Property DebianLike
-haskellPkgsInstalled dir = tightenTargets $
+haskellPkgsInstalled dir = tightenTargets $ 
 	flagFile go ("/haskellpkgsinstalled")
   where
 	go = userScriptProperty (User builduser)
@@ -105,10 +103,10 @@ cabalDeps = flagFile go cabalupdated
 			`assume` MadeChange
 		cabalupdated = homedir </> ".cabal" </> "packages" </> "hackage.haskell.org" </> "00-index.cache"
 
-autoBuilderContainer :: (System -> Flavor -> Property HasInfo) -> System -> Flavor -> Times -> TimeOut -> Systemd.Container
-autoBuilderContainer mkprop osver@(System _ arch) flavor crontime timeout =
-	Systemd.container name osver (Chroot.debootstrapped mempty)
-		& mkprop osver flavor
+autoBuilderContainer :: DebianSuite -> Architecture -> Flavor -> Times -> TimeOut -> Systemd.Container
+autoBuilderContainer suite arch flavor crontime timeout =
+	Systemd.container name $ \d -> Chroot.debootstrapped mempty d $ props
+		& osDebian suite arch
 		& autobuilder arch crontime timeout
   where
 	name = arch ++ fromMaybe "" flavor ++ "-git-annex-builder"
@@ -118,49 +116,13 @@ type Flavor = Maybe String
 standardAutoBuilder :: DebianSuite -> Architecture -> Flavor -> Property (HasInfo + Debian)
 standardAutoBuilder suite arch flavor =
 	propertyList "standard git-annex autobuilder" $ props
-		& os osver
+		& osDebian suite arch
 		& buildDepsApt
 		& Apt.stdSourcesList
 		& Apt.unattendedUpgrades
 		& Apt.cacheCleaned
 		& User.accountFor (User builduser)
 		& tree arch flavor
-
-stackAutoBuilder :: System -> Flavor -> Property HasInfo
-stackAutoBuilder osver@(System _ arch) flavor =
-	propertyList "git-annex autobuilder using stack" $ props
-		& os osver
-		& buildDepsNoHaskellLibs
-		& Apt.stdSourcesList
-		& Apt.unattendedUpgrades
-		& Apt.cacheCleaned
-		& User.accountFor (User builduser)
-		& tree arch flavor
-		& stackInstalled
-
-stackInstalled :: Property NoInfo
-stackInstalled = withOS "stack installed" $ \o ->
-	case o of
-		(Just (System (Debian (Stable "jessie")) "i386")) ->
-			ensureProperty $ manualinstall "i386"
-		_ -> ensureProperty $ Apt.installed ["haskell-stack"]
-  where
-	-- Warning: Using a binary downloaded w/o validation.
-	manualinstall arch = check (not <$> doesFileExist binstack) $
-		propertyList "stack installed from upstream tarball"
-			[ cmdProperty "wget" ["https://www.stackage.org/stack/linux-" ++ arch, "-O", tmptar]
-				`assume` MadeChange
-			, File.dirExists tmpdir
-			, cmdProperty "tar" ["xf", tmptar, "-C", tmpdir, "--strip-components=1"]
-				`assume` MadeChange
-			, cmdProperty "mv" [tmpdir </> "stack", binstack]
-				`assume` MadeChange
-			, cmdProperty "rm" ["-rf", tmpdir, tmptar]
-				`assume` MadeChange
-			]
-	binstack = "/usr/bin/stack"
-	tmptar = "/root/stack.tar.gz"
-	tmpdir = "/root/stack"
 
 stackAutoBuilder :: DebianSuite -> Architecture -> Flavor -> Property (HasInfo + Debian)
 stackAutoBuilder suite arch flavor =
@@ -171,23 +133,21 @@ stackAutoBuilder suite arch flavor =
 		& Apt.unattendedUpgrades
 		& Apt.cacheCleaned
 		& User.accountFor (User builduser)
-		& tree (architectureToDebianArchString arch) flavor
+		& tree arch flavor
 		& stackInstalled
-		-- Workaround https://github.com/commercialhaskell/stack/issues/2093
-		& Apt.installed ["libtinfo-dev"]
 
 stackInstalled :: Property Linux
 stackInstalled = withOS "stack installed" $ \w o ->
 	case o of
-		(Just (System (Debian Linux (Stable "jessie")) arch)) ->
-			ensureProperty w $ manualinstall arch
+		(Just (System (Debian (Stable "jessie")) "i386")) ->
+			ensureProperty w $ manualinstall "i386"
 		_ -> ensureProperty w $ Apt.installed ["haskell-stack"]
   where
 	-- Warning: Using a binary downloaded w/o validation.
 	manualinstall :: Architecture -> Property Linux
 	manualinstall arch = tightenTargets $ check (not <$> doesFileExist binstack) $
 		propertyList "stack installed from upstream tarball" $ props
-			& cmdProperty "wget" ["https://www.stackage.org/stack/linux-" ++ archname, "-O", tmptar]
+			& cmdProperty "wget" ["https://www.stackage.org/stack/linux-" ++ arch, "-O", tmptar]
 				`assume` MadeChange
 			& File.dirExists tmpdir
 			& cmdProperty "tar" ["xf", tmptar, "-C", tmpdir, "--strip-components=1"]
@@ -196,21 +156,12 @@ stackInstalled = withOS "stack installed" $ \w o ->
 				`assume` MadeChange
 			& cmdProperty "rm" ["-rf", tmpdir, tmptar]
 				`assume` MadeChange
-	  where
-	  	-- See https://www.stackage.org/stack/ for the list of
-		-- binaries.
-		archname = case arch of
-			X86_32 -> "i386"
-			X86_64 -> "x86_64"
-			ARMHF -> "arm"
-			-- Probably not available.
-			a -> architectureToDebianArchString a
 	binstack = "/usr/bin/stack"
 	tmptar = "/root/stack.tar.gz"
 	tmpdir = "/root/stack"
 
 armAutoBuilder :: DebianSuite -> Architecture -> Flavor -> Property (HasInfo + Debian)
-armAutoBuilder suite arch flavor =
+armAutoBuilder suite arch flavor = 
 	propertyList "arm git-annex autobuilder" $ props
 		& standardAutoBuilder suite arch flavor
 		& buildDepsNoHaskellLibs
@@ -234,14 +185,19 @@ androidAutoBuilderContainer'
 	-> Times
 	-> TimeOut
 	-> Systemd.Container
-androidContainer name setupgitannexdir gitannexdir = Systemd.container name osver bootstrap
-	& Apt.stdSourcesList
-	& User.accountFor (User builduser)
-	& File.dirExists gitbuilderdir
-	& File.ownerGroup homedir (User builduser) (Group builduser)
-	& flagFile chrootsetup ("/chrootsetup")
-		`requires` setupgitannexdir
-	& haskellPkgsInstalled "android"
+androidAutoBuilderContainer' name setupgitannexdir gitannexdir crontimes timeout = 
+	Systemd.container name $ \d -> bootstrap d $ props
+		& osDebian (Stable "jessie") "i386"
+		& Apt.stdSourcesList
+		& User.accountFor (User builduser)
+		& File.dirExists gitbuilderdir
+		& File.ownerGroup homedir (User builduser) (Group builduser)
+		& flagFile chrootsetup ("/chrootsetup")
+			`requires` setupgitannexdir
+		& haskellPkgsInstalled "android"
+		& Apt.unattendedUpgrades
+		& buildDepsNoHaskellLibs
+		& autobuilder "android" crontimes timeout
   where
 	-- Use git-annex's android chroot setup script, which will install
 	-- ghc-android and the NDK, all build deps, etc, in the home
@@ -250,5 +206,4 @@ androidContainer name setupgitannexdir gitannexdir = Systemd.container name osve
 		[ "cd " ++ gitannexdir ++ " && ./standalone/android/buildchroot-inchroot"
 		]
 		`assume` MadeChange
-	osver = System (Debian (Stable "jessie")) "i386"
 	bootstrap = Chroot.debootstrapped mempty
