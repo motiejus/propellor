@@ -15,7 +15,7 @@ module Propellor.Types
 	, Desc
 	, MetaType(..)
 	, MetaTypes
-	, OS(..)
+	, TargetOS(..)
 	, UnixLike
 	, Linux
 	, DebianLike
