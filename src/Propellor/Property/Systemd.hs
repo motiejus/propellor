@@ -77,13 +77,13 @@ instance IsContainer Container where
 -- Note that this does not configure systemd to start the service on boot,
 -- it only ensures that the service is currently running.
 started :: ServiceName -> Property Linux
-started n = cmdProperty "systemctl" ["start", n]
+started n = tightenTargets $ cmdProperty "systemctl" ["start", n]
 	`assume` NoChange
 	`describe` ("service " ++ n ++ " started")
 
 -- | Stops a systemd service.
 stopped :: ServiceName -> Property Linux
-stopped n = cmdProperty "systemctl" ["stop", n]
+stopped n = tightenTargets $ cmdProperty "systemctl" ["stop", n]
 	`assume` NoChange
 	`describe` ("service " ++ n ++ " stopped")
 
@@ -92,24 +92,24 @@ stopped n = cmdProperty "systemctl" ["stop", n]
 -- This does not ensure the service is started, it only configures systemd
 -- to start it on boot.
 enabled :: ServiceName -> Property Linux
-enabled n = cmdProperty "systemctl" ["enable", n]
+enabled n = tightenTargets $ cmdProperty "systemctl" ["enable", n]
 	`assume` NoChange
 	`describe` ("service " ++ n ++ " enabled")
 
 -- | Disables a systemd service.
 disabled :: ServiceName -> Property Linux
-disabled n = cmdProperty "systemctl" ["disable", n]
+disabled n = tightenTargets $ cmdProperty "systemctl" ["disable", n]
 	`assume` NoChange
 	`describe` ("service " ++ n ++ " disabled")
 
 -- | Masks a systemd service.
-masked :: ServiceName -> RevertableProperty Linux
+masked :: ServiceName -> RevertableProperty Linux Linux
 masked n = systemdMask <!> systemdUnmask
   where
-	systemdMask = cmdProperty "systemctl" ["mask", n]
+	systemdMask = tightenTargets $ cmdProperty "systemctl" ["mask", n]
 		`assume` NoChange
 		`describe` ("service " ++ n ++ " masked")
-	systemdUnmask = cmdProperty "systemctl" ["unmask", n]
+	systemdUnmask = tightenTargets $ cmdProperty "systemctl" ["unmask", n]
 		`assume` NoChange
 		`describe` ("service " ++ n ++ " unmasked")
 
@@ -119,7 +119,7 @@ running n = started n `requires` enabled n
 
 -- | Restarts a systemd service.
 restarted :: ServiceName -> Property Linux
-restarted n = cmdProperty "systemctl" ["restart", n]
+restarted n = tightenTargets $ cmdProperty "systemctl" ["restart", n]
 	`assume` NoChange
 	`describe` ("service " ++ n ++ " restarted")
 
@@ -138,14 +138,13 @@ logind = "systemd-logind"
 -- | Enables persistent storage of the journal.
 persistentJournal :: Property DebianLike
 persistentJournal = check (not <$> doesDirectoryExist dir) $
-	combineProperties "persistent systemd journal"
-		[ cmdProperty "install" ["-d", "-g", "systemd-journal", dir]
+	combineProperties "persistent systemd journal" $ props
+		& cmdProperty "install" ["-d", "-g", "systemd-journal", dir]
 			`assume` MadeChange
-		, cmdProperty "setfacl" ["-R", "-nm", "g:adm:rx,d:g:adm:rx", dir]
+		& Apt.installed ["acl"]
+		& cmdProperty "setfacl" ["-R", "-nm", "g:adm:rx,d:g:adm:rx", dir]
 			`assume` MadeChange
-		, started "systemd-journal-flush"
-		]
-		`requires` Apt.installed ["acl"]
+		& started "systemd-journal-flush"
   where
 	dir = "/var/log/journal"
 
@@ -159,10 +158,9 @@ type Option = String
 -- And it assumes the file already exists with
 -- the right [Header], so new lines can just be appended to the end.
 configured :: FilePath -> Option -> String -> Property Linux
-configured cfgfile option value = combineProperties desc
-	[ File.fileProperty desc (mapMaybe removeother) cfgfile
-	, File.containsLine cfgfile line
-	]
+configured cfgfile option value = tightenTargets $ combineProperties desc $ props
+	& File.fileProperty desc (mapMaybe removeother) cfgfile
+	& File.containsLine cfgfile line
   where
 	setting = option ++ "="
 	line = setting ++ value
@@ -173,7 +171,7 @@ configured cfgfile option value = combineProperties desc
 
 -- | Causes systemd to reload its configuration files.
 daemonReloaded :: Property Linux
-daemonReloaded = cmdProperty "systemctl" ["daemon-reload"]
+daemonReloaded = tightenTargets $ cmdProperty "systemctl" ["daemon-reload"]
 	`assume` NoChange
 
 -- | Configures journald, restarting it so the changes take effect.
@@ -184,11 +182,11 @@ journaldConfigured option value =
 
 -- | Ensures machined and machinectl are installed
 machined :: Property Linux
-machined = withOS "machined installed" $ \o ->
+machined = withOS "machined installed" $ \w o ->
 	case o of
 		-- Split into separate debian package since systemd 225.
 		(Just (System (Debian suite) _))
-			| not (isStable suite) -> ensureProperty $
+			| not (isStable suite) -> ensureProperty w $
 				Apt.installed ["systemd-container"]
 		_ -> noChange
 
@@ -199,17 +197,18 @@ machined = withOS "machined installed" $ \o ->
 -- add a property such as `osDebian` to specify the operating system
 -- to bootstrap.
 --
--- > container "webserver" (System (Debian Unstable) "amd64") (Chroot.debootstrapped mempty)
+-- > container "webserver" (Chroot.debootstrapped mempty)
+-- >	& osDebian Unstable "amd64"
 -- >    & Apt.installedRunning "apache2"
 -- >    & ...
-container :: MachineName -> System -> (FilePath -> Chroot.Chroot) -> Container
-container name system mkchroot = Container name c h
-	& os system
-	& resolvConfed
-	& linkJournal
+container :: MachineName -> (FilePath -> Chroot.Chroot) -> Container
+container name mkchroot = 
+	let c = Container name chroot h
+	in setContainerProps c $ containerProps c
+		&^ resolvConfed
+		&^ linkJournal
   where
-	c = mkchroot (containerDir name)
-		& os system
+	chroot = mkchroot (containerDir name)
 	h = Host name [] mempty
 
 -- | Runs a container using systemd-nspawn.
@@ -226,7 +225,7 @@ container name system mkchroot = Container name c h
 --
 -- Reverting this property stops the container, removes the systemd unit,
 -- and deletes the chroot and all its contents.
-nspawned :: Container -> RevertableProperty (HasInfo + UnixLike) UnixLike
+nspawned :: Container -> RevertableProperty (HasInfo + Linux) Linux
 nspawned c@(Container name (Chroot.Chroot loc builder _) h) =
 	p `describe` ("nspawned " ++ name)
   where
@@ -243,8 +242,9 @@ nspawned c@(Container name (Chroot.Chroot loc builder _) h) =
 
 	-- Use nsenter to enter container and and run propellor to
 	-- finish provisioning.
+	containerprovisioned :: RevertableProperty Linux Linux
 	containerprovisioned =
-		Chroot.propellChroot chroot (enterContainerProcess c) False
+		tightenTargets (Chroot.propellChroot chroot (enterContainerProcess c) False)
 			<!>
 		doNothing
 
@@ -252,7 +252,7 @@ nspawned c@(Container name (Chroot.Chroot loc builder _) h) =
 
 -- | Sets up the service file for the container, and then starts
 -- it running.
-nspawnService :: Container -> ChrootCfg -> RevertableProperty Linux
+nspawnService :: Container -> ChrootCfg -> RevertableProperty Linux Linux
 nspawnService (Container name _ _) cfg = setup <!> teardown
   where
 	service = nspawnServiceName name
@@ -309,8 +309,9 @@ nspawnServiceParams (SystemdNspawnCfg ps) =
 --
 -- This uses nsenter to enter the container, by looking up the pid of the
 -- container's init process and using its namespace.
-enterScript :: Container -> RevertableProperty Linux
-enterScript c@(Container name _ _) = setup <!> teardown
+enterScript :: Container -> RevertableProperty Linux Linux
+enterScript c@(Container name _ _) =
+	tightenTargets setup <!> tightenTargets teardown
   where
 	setup = combineProperties ("generated " ++ enterScriptFile c) $ props
 		& scriptfile `File.hasContent`
@@ -354,7 +355,7 @@ mungename = replace "/" "_"
 -- When there is no leading dash, "--" is prepended to the parameter.
 --
 -- Reverting the property will remove a parameter, if it's present.
-containerCfg :: String -> RevertableProperty (HasInfo + UnixLike) UnixLike
+containerCfg :: String -> RevertableProperty (HasInfo + Linux) (HasInfo + Linux)
 containerCfg p = RevertableProperty (mk True) (mk False)
   where
 	mk b = tightenTargets $
@@ -369,18 +370,18 @@ containerCfg p = RevertableProperty (mk True) (mk False)
 -- | Bind mounts </etc/resolv.conf> from the host into the container.
 --
 -- This property is enabled by default. Revert it to disable it.
-resolvConfed :: RevertableProperty (HasInfo + UnixLike) UnixLike
+resolvConfed :: RevertableProperty (HasInfo + Linux) (HasInfo + Linux)
 resolvConfed = containerCfg "bind=/etc/resolv.conf"
 
 -- | Link the container's journal to the host's if possible.
 -- (Only works if the host has persistent journal enabled.)
 --
 -- This property is enabled by default. Revert it to disable it.
-linkJournal :: RevertableProperty (HasInfo + UnixLike) UnixLike
+linkJournal :: RevertableProperty (HasInfo + Linux) (HasInfo + Linux)
 linkJournal = containerCfg "link-journal=try-guest"
 
 -- | Disconnect networking of the container from the host.
-privateNetwork :: RevertableProperty (HasInfo + UnixLike) UnixLike
+privateNetwork :: RevertableProperty (HasInfo + Linux) (HasInfo + Linux)
 privateNetwork = containerCfg "private-network"
 
 class Publishable a where
@@ -418,7 +419,7 @@ instance Publishable (Proto, Bound Port) where
 -- >	& Systemd.running Systemd.networkd
 -- >	& Systemd.publish (Port 80 ->- Port 8080)
 -- >	& Apt.installedRunning "apache2"
-publish :: Publishable p => p -> RevertableProperty (HasInfo + UnixLike) UnixLike
+publish :: Publishable p => p -> RevertableProperty (HasInfo + Linux) (HasInfo + Linux)
 publish p = containerCfg $ "--port=" ++ toPublish p
 
 class Bindable a where
@@ -431,9 +432,9 @@ instance Bindable (Bound FilePath) where
 	toBind v = hostSide v ++ ":" ++ containerSide v
 
 -- | Bind mount a file or directory from the host into the container.
-bind :: Bindable p => p -> RevertableProperty (HasInfo + UnixLike) UnixLike
+bind :: Bindable p => p -> RevertableProperty (HasInfo + Linux) (HasInfo + Linux)
 bind p = containerCfg $ "--bind=" ++ toBind p
 
 -- | Read-only mind mount.
-bindRo :: Bindable p => p -> RevertableProperty (HasInfo + UnixLike) UnixLike
+bindRo :: Bindable p => p -> RevertableProperty (HasInfo + Linux) (HasInfo + Linux)
 bindRo p = containerCfg $ "--bind-ro=" ++ toBind p
