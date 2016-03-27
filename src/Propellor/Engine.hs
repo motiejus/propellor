@@ -4,7 +4,6 @@
 module Propellor.Engine (
 	mainProperties,
 	runPropellor,
-	ensureProperty,
 	ensureChildProperties,
 	fromHost,
 	fromHost',
@@ -28,7 +27,6 @@ import Propellor.Types.Core
 import Propellor.Message
 import Propellor.Exception
 import Propellor.Info
-import Propellor.Property
 import Utility.Exception
 
 -- | Gets the Properties of a Host, and ensures them all,

@@ -152,7 +152,7 @@ provisioned' propigator c@(Chroot loc bootstrapper _) systemdonly =
 
 propagateChrootInfo :: Chroot -> Property Linux -> Property (HasInfo + Linux)
 propagateChrootInfo c@(Chroot location _ _) p = propagateContainer location c $
-	p `addInfoProperty` chrootInfo c
+	p `setInfoProperty` chrootInfo c
 
 chrootInfo :: Chroot -> Info
 chrootInfo (Chroot loc _ h) = mempty `addInfo`
