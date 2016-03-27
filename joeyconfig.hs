@@ -63,7 +63,7 @@ hosts =                --                  (o)  `
 
 testvm :: Host
 testvm = host "testvm.kitenet.net" $ props
-	& osDebian Unstable X86_64
+	& osDebian Unstable "amd64"
 	& OS.cleanInstallOnce (OS.Confirmed "testvm.kitenet.net")
 	 	`onChange` postinstall
 	& Hostname.sane
@@ -82,7 +82,6 @@ testvm = host "testvm.kitenet.net" $ props
 
 darkstar :: Host
 darkstar = host "darkstar.kitenet.net" $ props
-	& osDebian Unstable X86_64
 	& ipv6 "2001:4830:1600:187::2"
 	& Aiccu.hasConfig "T18376" "JHZ2-SIXXS"
 
@@ -100,8 +99,8 @@ darkstar = host "darkstar.kitenet.net" $ props
 		, swapPartition (MegaBytes 256)
 		]
   where
-	c d = Chroot.debootstrapped mempty d
-		& os (System (Debian Unstable) "amd64")
+	c d = Chroot.debootstrapped mempty d $ props
+		& osDebian Unstable "amd64"
 		& Hostname.setTo "demo"
 		& Apt.installed ["linux-image-amd64"]
 		& User "root" `User.hasInsecurePassword` "root"
@@ -112,7 +111,7 @@ gnu = host "gnu.kitenet.net" $ props
 
 clam :: Host
 clam = host "clam.kitenet.net" $ props
-	& standardSystem Unstable X86_64
+	& standardSystem Unstable "amd64" 
 		["Unreliable server. Anything here may be lost at any time!" ]
 	& ipv4 "167.88.41.194"
 
@@ -144,8 +143,9 @@ clam = host "clam.kitenet.net" $ props
 	& alias "us.scroll.joeyh.name"
 
 mayfly :: Host
-mayfly = standardSystem "mayfly.kitenet.net" (Stable "jessie") "amd64"
-	[ "Scratch VM. Contents can change at any time!" ]
+mayfly = host "mayfly.kitenet.net" $ props
+	& standardSystem (Stable "jessie") "amd64"
+		[ "Scratch VM. Contents can change at any time!" ]
 	& ipv4 "167.88.36.193"
 
 	& CloudAtCost.decruft
@@ -159,8 +159,9 @@ mayfly = standardSystem "mayfly.kitenet.net" (Stable "jessie") "amd64"
 	& Tor.bandwidthRate (Tor.PerMonth "400 GB")
 
 oyster :: Host
-oyster = standardSystem "oyster.kitenet.net" Unstable "amd64"
-	[ "Unreliable server. Anything here may be lost at any time!" ]
+oyster = host "oyster.kitenet.net" $ props
+	& standardSystem Unstable "amd64"
+		[ "Unreliable server. Anything here may be lost at any time!" ]
 	& ipv4 "104.167.117.109"
 
 	& CloudAtCost.decruft
@@ -183,7 +184,7 @@ oyster = standardSystem "oyster.kitenet.net" Unstable "amd64"
 
 orca :: Host
 orca = host "orca.kitenet.net" $ props
-	& standardSystem Unstable X86_64 [ "Main git-annex build box." ]
+	& standardSystem Unstable "amd64" [ "Main git-annex build box." ]
 	& ipv4 "138.38.108.179"
 
 	& Apt.unattendedUpgrades
@@ -196,7 +197,7 @@ orca = host "orca.kitenet.net" $ props
 		Unstable "amd64" Nothing (Cron.Times "15 * * * *") "2h")
 	& Systemd.nspawned (GitAnnexBuilder.autoBuilderContainer
 		GitAnnexBuilder.standardAutoBuilder
-		Unstable "i386") Nothing (Cron.Times "30 * * * *") "2h")
+		Unstable "i386" Nothing (Cron.Times "30 * * * *") "2h")
 	& Systemd.nspawned (GitAnnexBuilder.autoBuilderContainer
 		GitAnnexBuilder.stackAutoBuilder
 		(Stable "jessie") "i386" (Just "ancient") (Cron.Times "45 * * * *") "2h")
@@ -204,8 +205,8 @@ orca = host "orca.kitenet.net" $ props
 		(Cron.Times "1 1 * * *") "3h")
 
 honeybee :: Host
-honeybee = standardSystem "honeybee.kitenet.net" Testing "armhf"
-	[ "Arm git-annex build box." ]
+honeybee = host "honeybee.kitenet.net" $ props
+	& standardSystem Testing "armhf" [ "Arm git-annex build box." ]
 
 	-- I have to travel to get console access, so no automatic
 	-- upgrades, and try to be robust.
@@ -239,8 +240,8 @@ honeybee = standardSystem "honeybee.kitenet.net" Testing "armhf"
 -- multiuser system with eg, user passwords that are not deployed
 -- with propellor.
 kite :: Host
-kite = standardSystemUnhardened "kite.kitenet.net" Testing "amd64"
-	[ "Welcome to kite!" ]
+kite = host "kite.kitenet.net" $ props
+	& standardSystemUnhardened Testing "amd64" [ "Welcome to kite!" ]
 	& ipv4 "66.228.36.95"
 	& ipv6 "2600:3c03::f03c:91ff:fe73:b0d2"
 	& alias "kitenet.net"
@@ -356,7 +357,7 @@ kite = standardSystemUnhardened "kite.kitenet.net" Testing "amd64"
 
 elephant :: Host
 elephant = host "elephant.kitenet.net" $ props
-	& standardSystem Unstable X86_64
+	& standardSystem Unstable "amd64"
 		[ "Storage, big data, and backups, omnomnom!"
 		, "(Encrypt all data stored here.)"
 		]
@@ -455,12 +456,13 @@ pell = host "pell.branchable.com" $ props
 	& Branchable.server hosts
 	& Linode.serialGrub
 
--- See https://joeyh.name/code/keysafe/servers/ for requirements.
-keysafe :: Host
-keysafe = host "keysafe.joeyh.name" $ props
-	& ipv4 "139.59.17.168"
+iabak :: Host
+iabak = host "iabak.archiveteam.org" $ props
+	& ipv4 "124.6.40.227"
 	& Hostname.sane
-	& osDebian (Stable "jessie") X86_64
+	& osDebian Testing "amd64"
+	& Systemd.persistentJournal
+	& Cron.runPropellor (Cron.Times "30 * * * *")
 	& Apt.stdSourcesList `onChange` Apt.upgrade
 	& Apt.unattendedUpgrades
 	& DigitalOcean.distroKernel
@@ -471,7 +473,8 @@ keysafe = host "keysafe.joeyh.name" $ props
 	& Apt.removed ["nfs-common", "exim4", "exim4-base", "exim4-daemon-light", "rsyslog", "acpid", "rpcbind", "at"]
 
 	& User.hasSomePassword (User "root")
-	& User.accountFor (User "joey")
+	& propertyList "admin accounts"
+		(toProps $ map User.accountFor admins ++ map Sudo.enabledFor admins)
 	& User.hasSomePassword (User "joey")
 	& Sudo.enabledFor (User "joey")
 
@@ -516,6 +519,13 @@ keysafe = host "keysafe.joeyh.name" $ props
 --------------------------- \____, o          ,' ----------------------------
 ---------------------------- '--,___________,'  -----------------------------
 
+-- Simple web server, publishing the outside host's /var/www
+webserver :: Systemd.Container
+webserver = Systemd.debContainer "webserver" $ props
+	& standardContainer (Stable "jessie")
+	& Systemd.bind "/var/www"
+	& Apache.installed
+
 -- My own openid provider. Uses php, so containerized for security
 -- and administrative sanity.
 openidProvider :: Systemd.Container
@@ -556,7 +566,7 @@ type Motd = [String]
 
 -- This is my standard system setup.
 standardSystem :: DebianSuite -> Architecture -> Motd -> Property (HasInfo + Debian)
-standardSystem suite arch motd =
+standardSystem suite arch motd = 
 	standardSystemUnhardened suite arch motd
 		`before` Ssh.noPasswords
 
@@ -586,14 +596,12 @@ standardSystemUnhardened suite arch motd = propertyList "standard system" $ prop
 	! Systemd.killUserProcesses
 
 -- This is my standard container setup, Featuring automatic upgrades.
-standardContainer :: Systemd.MachineName -> DebianSuite -> Architecture -> Systemd.Container
-standardContainer name suite arch =
-	Systemd.container name system (Chroot.debootstrapped mempty)
-		& Apt.stdSourcesList `onChange` Apt.upgrade
-		& Apt.unattendedUpgrades
-		& Apt.cacheCleaned
-  where
-	system = System (Debian suite) arch
+standardContainer :: DebianSuite -> Property (HasInfo + Debian)
+standardContainer suite = propertyList "standard container" $ props
+	& osDebian suite "amd64"
+	& Apt.stdSourcesList `onChange` Apt.upgrade
+	& Apt.unattendedUpgrades
+	& Apt.cacheCleaned
 
 myDnsSecondary :: Property (HasInfo + DebianLike)
 myDnsSecondary = propertyList "dns secondary for all my domains" $ props
@@ -602,13 +610,13 @@ myDnsSecondary = propertyList "dns secondary for all my domains" $ props
 	& Dns.secondary hosts "ikiwiki.info"
 	& Dns.secondary hosts "olduse.net"
 
-branchableSecondary :: RevertableProperty HasInfo
+branchableSecondary :: RevertableProperty (HasInfo + DebianLike) DebianLike
 branchableSecondary = Dns.secondaryFor ["branchable.com"] hosts "branchable.com"
 
 -- Currently using kite (ns4) as primary with secondaries
 -- elephant (ns3) and gandi.
 -- kite handles all mail.
-myDnsPrimary :: Bool -> Domain -> [(BindDomain, Record)] -> RevertableProperty HasInfo
+myDnsPrimary :: Bool -> Domain -> [(BindDomain, Record)] -> RevertableProperty (HasInfo + DebianLike) DebianLike
 myDnsPrimary dnssec domain extras = (if dnssec then Dns.signedPrimary (Weekly Nothing) else Dns.primary) hosts domain
 	(Dns.mkSOA "ns4.kitenet.net" 100) $
 	[ (RootDomain, NS $ AbsDomain "ns4.kitenet.net")
@@ -622,18 +630,21 @@ myDnsPrimary dnssec domain extras = (if dnssec then Dns.signedPrimary (Weekly No
 
 monsters :: [Host]    -- Systems I don't manage with propellor,
 monsters =            -- but do want to track their public keys etc.
-	[ host "usw-s002.rsync.net"
+	[ host "usw-s002.rsync.net" $ props
 		& Ssh.hostPubKey SshEd25519 "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB7yTEBGfQYdwG/oeL+U9XPMIh/dW7XNs9T+M79YIOrd"
-	, host "github.com"
+	, host "github.com" $ props
 		& Ssh.hostPubKey SshRsa "ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ=="
-	, host "gitlab.com"
+	, host "gitlab.com" $ props
 		& Ssh.hostPubKey SshEcdsa "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBFSMqzJeV9rUzU4kWitGjeR4PWSa29SPqJ1fVkhtj3Hw9xjLVXVYrU9QlYWrOLXBpQ6KWjbjTDTdDkoohFzgbEY="
-	, host "ns6.gandi.net"
+	, host "ns6.gandi.net" $ props
 		& ipv4 "217.70.177.40"
+	, host "turtle.kitenet.net" $ props
+		& ipv4 "67.223.19.96"
+		& ipv6 "2001:4978:f:2d9::2"
 	, host "mouse.kitenet.net" $ props
 		& ipv6 "2001:4830:1600:492::2"
-		& ipv4 "67.223.19.96"
 	, host "animx" $ props
+		& ipv4 "76.7.162.101"
 		& ipv4 "76.7.162.186"
 		& ipv4 "76.7.162.187"
 	]
