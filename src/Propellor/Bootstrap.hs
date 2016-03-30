@@ -126,7 +126,7 @@ installGitCommand msys = case msys of
 	Nothing -> use apt
   where
 	use cmds = "if ! git --version >/dev/null; then " ++ intercalate " && " cmds ++ "; fi"
-	apt = 
+	apt =
 		[ "apt-get update"
 		, "DEBIAN_FRONTEND=noninteractive apt-get --no-install-recommends --no-upgrade -y install git"
 		]
@@ -135,7 +135,7 @@ buildPropellor :: Maybe Host -> IO ()
 buildPropellor mh = unlessM (actionMessage "Propellor build" (build msys)) $
 	errorMessage "Propellor build failed!"
   where
-	msys = case fmap (fromInfo . hostInfo) mh of
+	msys = case fmap (getInfo . hostInfo) mh of
 		Just (InfoVal sys) -> Just sys
 		_ -> Nothing
 
@@ -170,7 +170,7 @@ build msys = catchBoolIO $ do
 		( return True
 		, case msys of
 			Nothing -> return False
-			Just sys -> 
+			Just sys ->
 				boolSystem "sh" [Param "-c", Param (depsCommand (Just sys))]
 					<&&> cabal ["configure"]
 		)
