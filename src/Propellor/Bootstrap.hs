@@ -7,7 +7,6 @@ module Propellor.Bootstrap (
 
 import Propellor.Base
 import Propellor.Types.Info
-import Propellor.Git.Config
 
 import System.Posix.Files
 import Data.List
@@ -140,24 +139,16 @@ buildPropellor mh = unlessM (actionMessage "Propellor build" (build msys)) $
 		Just (InfoVal sys) -> Just sys
 		_ -> Nothing
 
--- Build propellor using cabal or stack, and symlink propellor to the
--- built binary.
-build :: Maybe System -> IO Bool
-build msys = catchBoolIO $ do
-	bs <- getGitConfigValue "propellor.buildsystem"
-	case bs of
-		Just "stack" -> stackBuild msys
-		_ -> cabalBuild msys
-
 -- For speed, only runs cabal configure when it's not been run before.
 -- If the build fails cabal may need to have configure re-run.
-build :: IO Bool
-build = catchBoolIO $ do
-	make "dist/setup-config" ["propellor.cabal"] $
-		cabal ["configure"]
-	unlessM (cabal ["build", "propellor-config"]) $ do
-		void $ cabal ["configure"]
-		unlessM (cabal ["build"]) $
+--
+-- If the cabal configure fails, and a System is provided, installs
+-- dependencies and retries.
+build :: Maybe System -> IO Bool
+build msys = catchBoolIO $ do
+	make "dist/setup-config" ["propellor.cabal"] cabal_configure
+	unlessM cabal_build $
+		unlessM (cabal_configure <&&> cabal_build) $
 			error "cabal build failed"
 	-- For safety against eg power loss in the middle of the build,
 	-- make a copy of the binary, and move it into place atomically.
@@ -174,44 +165,16 @@ build = catchBoolIO $ do
   where
 	cabalbuiltbin = "dist/build/propellor-config/propellor-config"
 	safetycopy = cabalbuiltbin ++ ".built"
+	tmpfor f = f ++ ".propellortmp"
 	cabal_configure = ifM (cabal ["configure"])
 		( return True
 		, case msys of
 			Nothing -> return False
-			Just sys ->
+			Just sys -> 
 				boolSystem "sh" [Param "-c", Param (depsCommand (Just sys))]
 					<&&> cabal ["configure"]
 		)
 	cabal_build = cabal ["build", "propellor-config"]
-
-stackBuild :: Maybe System -> IO Bool
-stackBuild _msys = do
-	createDirectoryIfMissing True builddest
-	ifM (stack buildparams)
-		( do
-			symlinkPropellorBin (builddest </> "propellor-config")
-			return True
-		, return False
-		)
-  where
- 	builddest = ".built"
-	buildparams =
-		[ "--local-bin-path", builddest
-		, "build"
-		, ":propellor-config" -- only build config program
-		, "--copy-bins"
-		]
-
--- Atomic symlink creation/update.
-symlinkPropellorBin :: FilePath -> IO ()
-symlinkPropellorBin bin = do
-	createSymbolicLink bin (tmpfor dest)
-	rename (tmpfor dest) dest
-  where
-	dest = "propellor"
-
-tmpfor :: FilePath -> FilePath
-tmpfor f = f ++ ".propellortmp"
 
 make :: FilePath -> [FilePath] -> IO Bool -> IO ()
 make dest srcs builder = do

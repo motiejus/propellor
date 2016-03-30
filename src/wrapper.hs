@@ -78,9 +78,21 @@ wrapper args propellordir propellorbin = do
 			)
 		)
 
-buildRunConfig :: [String] -> IO ()
-buildRunConfig args = do
-	unlessM (doesFileExist "propellor") $ do
+	checkRepo = whenM (doesFileExist disthead <&&> doesFileExist (propellordir </> "propellor.cabal")) $ do
+		headrev <- takeWhile (/= '\n') <$> readFile disthead
+		changeWorkingDirectory propellordir
+		headknown <- catchMaybeIO $ 
+			withQuietOutput createProcessSuccess $
+				proc "git" ["log", headrev]
+		if (headknown == Nothing)
+			then setupupstreammaster headrev propellordir
+			else do
+				merged <- not . null <$>
+					readProcess "git" ["log", headrev ++ "..HEAD", "--ancestry-path"]
+				unless merged $
+					warnoutofdate propellordir True
+	buildruncfg = do
+		changeWorkingDirectory propellordir
 		buildPropellor Nothing
 		putStrLn ""
 		putStrLn ""
