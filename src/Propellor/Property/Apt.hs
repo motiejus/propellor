@@ -182,10 +182,12 @@ noninteractiveEnv =
 		, ("APT_LISTCHANGES_FRONTEND", "none")
 		]
 
-update :: Property DebianLike
-update = runApt ["update"]
-	`assume` MadeChange
-	`describe` "apt update"
+update :: Property NoInfo
+update = combineProperties ("apt update")
+	[ pendingConfigured
+	, runApt ["update"]
+		`assume` MadeChange
+	]
 
 -- | Have apt upgrade packages, adding new packages and removing old as
 -- necessary.
@@ -334,8 +336,8 @@ type DebconfTemplateValue = String
 -- | Preseeds debconf values and reconfigures the package so it takes
 -- effect.
 reConfigure :: Package -> [(DebconfTemplate, DebconfTemplateType, DebconfTemplateValue)] -> Property DebianLike
-reConfigure package vals = tightenTargets $ 
-	reconfigure 
+reConfigure package vals = tightenTargets $
+	reconfigure
 		`requires` setselections
 		`describe` ("reconfigure " ++ package)
   where
