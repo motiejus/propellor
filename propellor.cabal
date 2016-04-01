@@ -77,6 +77,7 @@ Library
     Propellor.Property.Apache
     Propellor.Property.Apt
     Propellor.Property.Apt.PPA
+    Propellor.Property.Attic
     Propellor.Property.Cmd
     Propellor.Property.Concurrent
     Propellor.Property.Conductor
