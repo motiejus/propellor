@@ -1,4 +1,6 @@
-# When updating the resolver here, also update stackResolver in Propellor.DotDir
-resolver: lts-7.16
+resolver: lts-5.10
 packages:
 - '.'
+flags:
+  propellor:
+    usestack: true
