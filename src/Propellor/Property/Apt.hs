@@ -182,15 +182,16 @@ noninteractiveEnv =
 		, ("APT_LISTCHANGES_FRONTEND", "none")
 		]
 
-update :: Property NoInfo
-update = combineProperties ("apt update")
-	[ pendingConfigured
-	, runApt ["update"]
+-- | Have apt update its lists of packages, but without upgrading anything.
+update :: Property DebianLike
+update = combineProperties ("apt update") $ props
+	& pendingConfigured
+	& runApt ["update"]
 		`assume` MadeChange
 	]
 
 -- | Have apt upgrade packages, adding new packages and removing old as
--- necessary.
+-- necessary. Often used in combination with the `update` property.
 upgrade :: Property DebianLike
 upgrade = upgrade' "dist-upgrade"
 
@@ -329,7 +330,8 @@ unattendedUpgrades = enable <!> disable
 					("Unattended-Upgrade::Origins-Pattern { \"o=Debian,a="++showSuite suite++"\"; };")
 			_ -> noChange
 
--- | Enable periodic updates.
+-- | Enable periodic updates (but not upgrades), including download
+-- of packages.
 periodicUpdates :: Property DebianLike
 periodicUpdates = tightenTargets $ "/etc/apt/apt.conf.d/02periodic" `File.hasContent`
 	[ "APT::Periodic::Enable \"1\";"
