@@ -329,6 +329,15 @@ unattendedUpgrades = enable <!> disable
 					("Unattended-Upgrade::Origins-Pattern { \"o=Debian,a="++showSuite suite++"\"; };")
 			_ -> noChange
 
+-- | Enable periodic updates.
+periodicUpdates :: Property DebianLike
+periodicUpdates = tightenTargets $ "/etc/apt/apt.conf.d/02periodic" `File.hasContent`
+	[ "APT::Periodic::Enable \"1\";"
+	, "APT::Periodic::Update-Package-Lists \"1\";"
+	, "APT::Periodic::Download-Upgradeable-Packages \"1\";"
+	, "APT::Periodic::Verbose \"1\";"
+	]
+
 type DebconfTemplate = String
 type DebconfTemplateType = String
 type DebconfTemplateValue = String
