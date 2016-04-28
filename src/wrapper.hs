@@ -14,11 +14,9 @@ import Propellor.Message
 import Propellor.Bootstrap
 import Utility.Monad
 import Utility.Directory
-import Utility.FileMode
 import Utility.Process
 import Utility.Process.NonConcurrent
 
-import System.Directory
 import System.Environment (getArgs)
 import System.Exit
 import System.Posix.Directory
