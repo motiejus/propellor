@@ -47,7 +47,7 @@ import Propellor.PropAccum
 import Propellor.Location
 import Propellor.Utilities
 
-import Utility.SystemDirectory
+import System.Directory hiding (isSymbolicLink)
 import System.IO
 import System.FilePath
 import Data.Maybe
