@@ -80,17 +80,28 @@ spin' mprivdata relay target hst = do
 		Nothing -> getSshTarget target hst
 
 	-- Install, or update the remote propellor.
-	updateServer target relay hst
-		(proc "ssh" $ cacheparams ++ [sshtarget, shellWrap probecmd])
-		(proc "ssh" $ cacheparams ++ [sshtarget, shellWrap updatecmd])
-		=<< getprivdata
-
+	case build of
+		Nothing -> updateServer target relay hst
+			(proc "ssh" $ cacheparams ++ [sshtarget, shellWrap probecmd])
+			(proc "ssh" $ cacheparams ++ [sshtarget, shellWrap updatecmd])
+			=<< getprivdata
+		Just Precompiled -> do
+			sendPrecompiled target
+			updateServer target relay hst
+				(proc "ssh" $ cacheparams ++ [sshtarget, shellWrap probecmd])
+				(error "loop")
+				=<< getprivdata
 	-- And now we can run it.
 	unlessM (boolSystemNonConcurrent "ssh" (map Param $ cacheparams ++ ["-t", sshtarget, shellWrap runcmd])) $
 		error "remote propellor failed"
   where
 	hn = fromMaybe target relay
 	sys = case fromInfo (hostInfo hst) of
+		InfoVal o -> Just o
+		NoInfoVal -> Nothing
+
+	build :: Maybe Build
+	build = case fromInfo (hostInfo hst) of
 		InfoVal o -> Just o
 		NoInfoVal -> Nothing
 

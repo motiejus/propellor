@@ -77,7 +77,7 @@ askInfo = asks (fromInfo . hostInfo)
 
 -- | Specifies that a host's operating system is Debian,
 -- and further indicates the suite and architecture.
--- 
+--
 -- This provides info for other Properties, so they can act
 -- conditionally on the details of the OS.
 --

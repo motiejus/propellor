@@ -27,6 +27,7 @@ module Propellor.Types (
 	, Buntish
 	, ArchLinux
 	, FreeBSD
+	, Build(..)
 	, HasInfo
 	, type (+)
 	, TightenTargets(..)
@@ -50,6 +51,7 @@ import Prelude
 import Propellor.Types.Core
 import Propellor.Types.Info
 import Propellor.Types.OS
+import Propellor.Types.Build
 import Propellor.Types.ConfigurableValue
 import Propellor.Types.Dns
 import Propellor.Types.Result
@@ -61,7 +63,7 @@ import Propellor.Types.ZFS
 -- it has the property.
 --
 -- There are different types of properties that target different OS's,
--- and so have different metatypes. 
+-- and so have different metatypes.
 -- For example: "Property DebianLike" and "Property FreeBSD".
 --
 -- Also, some properties have associated `Info`, which is indicated in
@@ -196,7 +198,7 @@ class TightenTargets p where
 	-- > upgraded :: Property DebianLike
 	-- > upgraded = tightenTargets $ cmdProperty "apt-get" ["upgrade"]
 	tightenTargets
-		:: 
+		::
 			-- Note that this uses PolyKinds
 			( (Targets untightened `NotSuperset` Targets tightened) ~ 'CanCombine
 			, (NonTargets tightened `NotSuperset` NonTargets untightened) ~ 'CanCombine
@@ -226,7 +228,7 @@ instance SingI metatypes => Monoid (Property (MetaTypes metatypes))
 			(Nothing, Just _) -> d2
 			(Nothing, Nothing) -> d1
 
--- | Any type of RevertableProperty is a monoid. When revertable 
+-- | Any type of RevertableProperty is a monoid. When revertable
 -- properties x and y are appended together, the resulting revertable
 -- property has a description like "x and y".
 -- Note that when x fails to be ensured, it will not try to ensure y.
