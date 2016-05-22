@@ -22,7 +22,6 @@ import Control.Monad.IO.Class (liftIO)
 #endif
 import Control.Monad.IO.Class (MonadIO)
 import Foreign (complement)
-import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.Catch
 
 import Utility.Exception

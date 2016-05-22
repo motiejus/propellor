@@ -22,7 +22,8 @@ module Utility.Exception (
 	tryNonAsync,
 	tryWhenExists,
 	catchIOErrorType,
-	IOErrorType(..)
+	IOErrorType(..),
+	catchPermissionDenied,
 ) where
 
 import Control.Monad.Catch as X hiding (Handler)
