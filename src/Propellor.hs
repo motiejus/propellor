@@ -9,13 +9,13 @@
 -- > import Propellor
 -- > import qualified Propellor.Property.File as File
 -- > import qualified Propellor.Property.Apt as Apt
--- > 
+-- >
 -- > main :: IO ()
 -- > main = defaultMain hosts
--- > 
+-- >
 -- > hosts :: [Host]
 -- > hosts = [example]
--- > 
+-- >
 -- > example :: Host
 -- > example = host "example.com" $ props
 -- >     & Apt.installed ["mydaemon"]
@@ -59,6 +59,8 @@ module Propellor (
 	-- | Combining a list of properties into a single property
 	, module Propellor.Types.PrivData
 	-- | Private data access for properties
+	, module Propellor.Property.Precompiled
+	-- | Properties to precompile propellor
 
 	, module X
 ) where
@@ -68,6 +70,7 @@ import Propellor.CmdLine (defaultMain)
 import Propellor.Property
 import Propellor.Property.List
 import Propellor.Property.Cmd
+import Propellor.Property.Precompiled
 import Propellor.Types.PrivData
 import Propellor.Info
 import Propellor.PropAccum

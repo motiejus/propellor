@@ -130,6 +130,7 @@ Library
     Propellor.Property.Parted
     Propellor.Property.Partition
     Propellor.Property.Postfix
+    Propellor.Property.Precompiled
     Propellor.Property.PropellorRepo
     Propellor.Property.Prosody
     Propellor.Property.Reboot
