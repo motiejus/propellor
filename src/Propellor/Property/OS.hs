@@ -46,7 +46,7 @@ import Control.Exception (throw)
 -- install succeeds, to bootstrap from the cleanly installed system to
 -- a fully working system. For example:
 --
--- > & osDebian Unstable "amd64"
+-- > & osDebian Unstable X86_64
 -- > & cleanInstallOnce (Confirmed "foo.example.com")
 -- >    `onChange` propertyList "fixing up after clean install"
 -- >        [ preserveNetwork
@@ -90,7 +90,7 @@ cleanInstallOnce confirmation = check (not <$> doesFileExist flagfile) $
 		(Just u@(System (Buntish _) _)) -> ensureProperty w $
 			debootstrap u
 		_ -> unsupportedOS'
-	
+
 	debootstrap :: System -> Property Linux
 	debootstrap targetos =
 		-- Install debootstrap from source, since we don't know
@@ -150,7 +150,7 @@ cleanInstallOnce confirmation = check (not <$> doesFileExist flagfile) $
 		--   git repo url, which all need to be arranged to
 		--   be present in /old-os's /usr/local/propellor)
 		-- TODO
-	
+
 	finalized :: Property UnixLike
 	finalized = property "clean OS installed" $ do
 		liftIO $ writeFile flagfile ""

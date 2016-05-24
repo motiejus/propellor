@@ -65,7 +65,7 @@ type DiskImage = FilePath
 -- > import Propellor.Property.DiskImage
 --
 -- > let chroot d = Chroot.debootstrapped mempty d
--- >	& osDebian Unstable "amd64"
+-- >	& osDebian Unstable X86_64
 -- >	& Apt.installed ["linux-image-amd64"]
 -- >	& User.hasPassword (User "root")
 -- >	& User.accountFor (User "demo")
@@ -100,7 +100,7 @@ imageRebuilt :: DiskImage -> (FilePath -> Chroot) -> TableType -> Finalization -
 imageRebuilt = imageBuilt' True
 
 imageBuilt' :: Bool -> DiskImage -> (FilePath -> Chroot) -> TableType -> Finalization -> [PartSpec] -> RevertableProperty (HasInfo + Linux) Linux
-imageBuilt' rebuild img mkchroot tabletype final partspec = 
+imageBuilt' rebuild img mkchroot tabletype final partspec =
 	imageBuiltFrom img chrootdir tabletype final partspec
 		`requires` Chroot.provisioned chroot
 		`requires` (cleanrebuild <!> (doNothing :: Property UnixLike))
@@ -160,7 +160,7 @@ imageBuiltFrom img chrootdir tabletype final partspec = mkimg <!> rmimg
 	rmimg = File.notPresent img
 
 partitionsPopulated :: FilePath -> [Maybe MountPoint] -> [MountOpts] -> [LoopDev] -> Property Linux
-partitionsPopulated chrootdir mnts mntopts devs = property' desc $ \w -> 
+partitionsPopulated chrootdir mnts mntopts devs = property' desc $ \w ->
 	mconcat $ zipWith3 (go w) mnts mntopts devs
   where
 	desc = "partitions populated from " ++ chrootdir
@@ -224,7 +224,7 @@ getMountSz szm l (Just mntpt) =
 	childsz = mconcat $ mapMaybe (getMountSz szm l) (filter (isChild mntpt) l)
 
 -- | Ensures that a disk image file of the specified size exists.
--- 
+--
 -- If the file doesn't exist, or is too small, creates a new one, full of 0's.
 --
 -- If the file is too large, truncates it down to the specified size.
@@ -232,7 +232,7 @@ imageExists :: FilePath -> ByteSize -> Property Linux
 imageExists img sz = property ("disk image exists" ++ img) $ liftIO $ do
 	ms <- catchMaybeIO $ getFileStatus img
 	case ms of
-		Just s 
+		Just s
 			| toInteger (fileSize s) == toInteger sz -> return NoChange
 			| toInteger (fileSize s) > toInteger sz -> do
 				setFileSize img (fromInteger sz)
@@ -248,15 +248,15 @@ imageExists img sz = property ("disk image exists" ++ img) $ liftIO $ do
 -- with its populated partition tree mounted in the provided
 -- location from the provided loop devices. This will typically
 -- take care of installing the boot loader to the image.
--- 
+--
 -- It's ok if the second property leaves additional things mounted
 -- in the partition tree.
 type Finalization = (Property Linux, (FilePath -> [LoopDev] -> Property Linux))
 
 imageFinalized :: Finalization -> [Maybe MountPoint] -> [MountOpts] -> [LoopDev] -> PartTable -> Property Linux
-imageFinalized (_, final) mnts mntopts devs (PartTable _ parts) = 
+imageFinalized (_, final) mnts mntopts devs (PartTable _ parts) =
 	property' "disk image finalized" $ \w ->
-		withTmpDir "mnt" $ \top -> 
+		withTmpDir "mnt" $ \top ->
 			go w top `finally` liftIO (unmountall top)
   where
 	go w top = do
@@ -264,12 +264,12 @@ imageFinalized (_, final) mnts mntopts devs (PartTable _ parts) =
 		liftIO $ writefstab top
 		liftIO $ allowservices top
 		ensureProperty w $ final top devs
-	
+
 	-- Ordered lexographically by mount point, so / comes before /usr
 	-- comes before /usr/local
 	orderedmntsdevs :: [(Maybe MountPoint, (MountOpts, LoopDev))]
 	orderedmntsdevs = sortBy (compare `on` fst) $ zip mnts (zip mntopts devs)
-	
+
 	swaps = map (SwapPartition . partitionLoopDev . snd) $
 		filter ((== LinuxSwap) . partFs . fst) $
 			zip parts devs
@@ -285,7 +285,7 @@ imageFinalized (_, final) mnts mntopts devs (PartTable _ parts) =
 	unmountall top = do
 		unmountBelow top
 		umountLazy top
-	
+
 	writefstab top = do
 		let fstab = top ++ "/etc/fstab"
 		old <- catchDefaultIO [] $ filter (not . unconfigured) . lines
