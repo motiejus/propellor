@@ -44,6 +44,8 @@ type HostOS = PrecompiledOS
 getControllerOS :: PrecompiledOS
 getControllerOS = case os of
 	"linux" -> PLinux
+	"freebsd" -> PBSD
+	"kfreebsdgnu" -> PBSD
 	h -> error $ "Unknown OS: " ++ h
 	-- TODO: add other oses
 
