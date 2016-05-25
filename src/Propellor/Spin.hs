@@ -20,6 +20,7 @@ import qualified Data.Set as S
 import Network.Socket (getAddrInfo, defaultHints, AddrInfo(..), AddrInfoFlag(..), SockAddr)
 
 import Propellor.Base
+import Propellor.Precompiled
 import Propellor.Protocol
 import Propellor.PrivData.Paths
 import Propellor.Git
@@ -80,12 +81,11 @@ spin' mprivdata relay target hst = do
 		Nothing -> getSshTarget target hst
 
 	-- Install, or update the remote propellor.
-	sendprecompiled build
-
-	updateServer target relay hst
-		(proc "ssh" $ cacheparams ++ [sshtarget, shellWrap probecmd])
-		(haveprecompiled build cacheparams sshtarget)
-		=<< getprivdata
+	case (build, isPrecompilable <$> sys) of
+		(Just Precompiled, Just True) -> do
+			sendPrecompiled target
+			updateserver cacheparams sshtarget (Just Precompiled)
+		_ -> updateserver cacheparams sshtarget Nothing
 
 	-- And now we can run it.
 	unlessM (boolSystemNonConcurrent "ssh" (map Param $ cacheparams ++ ["-t", sshtarget, shellWrap runcmd])) $
@@ -141,11 +141,12 @@ spin' mprivdata relay target hst = do
 				filterPrivData hst <$> decryptPrivData
 		Just pd -> pure pd
 
-	sendprecompiled Nothing = return ()
-	sendprecompiled (Just Precompiled) = sendPrecompiled target
-
-	haveprecompiled Nothing cacheparams sshtarget = proc "ssh" $ cacheparams ++ [sshtarget, shellWrap updatecmd]
-	haveprecompiled (Just Precompiled) _ _ = error "loop"
+	updateserver cacheparams sshtarget (Just Precompiled) = updateserver' cacheparams sshtarget (error "loop")
+	updateserver cacheparams sshtarget Nothing = updateserver' cacheparams sshtarget (proc "ssh" $ cacheparams ++ [sshtarget, shellWrap updatecmd])
+	updateserver' cacheparams sshtarget p = updateServer target relay hst
+		(proc "ssh" $ cacheparams ++ [sshtarget, shellWrap probecmd])
+		p
+		=<< getprivdata
 
 -- Check if the Host contains an IP address that matches one of the IPs
 -- in the DNS for the HostName. If so, the HostName is used as-is,
