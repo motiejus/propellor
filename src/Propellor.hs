@@ -59,7 +59,7 @@ module Propellor (
 	-- | Combining a list of properties into a single property
 	, module Propellor.Types.PrivData
 	-- | Private data access for properties
-	, module Propellor.Property.Precompiled
+	, module Propellor.Precompiled
 	-- | Properties to precompile propellor
 
 	, module X
@@ -67,10 +67,10 @@ module Propellor (
 
 import Propellor.Types
 import Propellor.CmdLine (defaultMain)
+import Propellor.Precompiled
 import Propellor.Property
 import Propellor.Property.List
 import Propellor.Property.Cmd
-import Propellor.Property.Precompiled
 import Propellor.Types.PrivData
 import Propellor.Info
 import Propellor.PropAccum

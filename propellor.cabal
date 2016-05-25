@@ -80,6 +80,7 @@ Library
     Propellor
     Propellor.Base
     Propellor.Location
+    Propellor.Precompiled
     Propellor.Property
     Propellor.Property.Aiccu
     Propellor.Property.Apache
@@ -130,7 +131,6 @@ Library
     Propellor.Property.Parted
     Propellor.Property.Partition
     Propellor.Property.Postfix
-    Propellor.Property.Precompiled
     Propellor.Property.PropellorRepo
     Propellor.Property.Prosody
     Propellor.Property.Reboot
