@@ -22,8 +22,25 @@ getControllerArchitecture = case arch of
 	"amd64" -> X86_64
 	"i386" -> X86_32
 	"i686" -> X86_32
+	"ppc" -> PPC
+	"powerpc" -> PPC
+	"powerpc64" -> PPC64
+	"sparc" -> SPARC
+	"sparc64" -> SPARC64
+	"mips" -> MIPS
+	"mipsel" -> MIPSEL
+	"mips64el" -> MIPS64EL
+	"sh" -> SH4
+	"sh4" -> SH4
+	"ia64" -> M68K
+	"s390" -> S390
+	"s390x" -> S390X
+	"alpha" -> ALPHA
+	"hppa" -> HPPA
+	"m68k" -> M68K
+	"arm64" -> ARM64
+	"x32" -> X32
 	a -> error $ "Unknown architecture: " ++ a
-	-- TODO: add other architectures
 
 compatibleArch :: ControllerArchitecture -> HostArchitecture -> Bool
 compatibleArch x y | x == y = True
