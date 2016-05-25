@@ -16,31 +16,31 @@ precompiled = pureInfoProperty ("Set build state as precompiled") (InfoVal Preco
 type ControllerArchitecture = Architecture
 type HostArchitecture = Architecture
 
-getControllerArchitecture :: Architecture
+getControllerArchitecture :: Either String Architecture
 getControllerArchitecture = case arch of
-	"x86_64" -> X86_64
-	"amd64" -> X86_64
-	"i386" -> X86_32
-	"i686" -> X86_32
-	"ppc" -> PPC
-	"powerpc" -> PPC
-	"powerpc64" -> PPC64
-	"sparc" -> SPARC
-	"sparc64" -> SPARC64
-	"mips" -> MIPS
-	"mipsel" -> MIPSEL
-	"mips64el" -> MIPS64EL
-	"sh" -> SH4
-	"sh4" -> SH4
-	"ia64" -> M68K
-	"s390" -> S390
-	"s390x" -> S390X
-	"alpha" -> ALPHA
-	"hppa" -> HPPA
-	"m68k" -> M68K
-	"arm64" -> ARM64
-	"x32" -> X32
-	a -> error $ "Unknown architecture: " ++ a
+	"x86_64" -> Right X86_64
+	"amd64" -> Right X86_64
+	"i386" -> Right X86_32
+	"i686" -> Right X86_32
+	"ppc" -> Right PPC
+	"powerpc" -> Right PPC
+	"powerpc64" -> Right PPC64
+	"sparc" -> Right SPARC
+	"sparc64" -> Right SPARC64
+	"mips" -> Right MIPS
+	"mipsel" -> Right MIPSEL
+	"mips64el" -> Right MIPS64EL
+	"sh" -> Right SH4
+	"sh4" -> Right SH4
+	"ia64" -> Right M68K
+	"s390" -> Right S390
+	"s390x" -> Right S390X
+	"alpha" -> Right ALPHA
+	"hppa" -> Right HPPA
+	"m68k" -> Right M68K
+	"arm64" -> Right ARM64
+	"x32" -> Right X32
+	a -> Left ("Unknown architecture: " ++ a)
 
 compatibleArch :: ControllerArchitecture -> HostArchitecture -> Bool
 compatibleArch x y | x == y = True
@@ -58,20 +58,20 @@ targetOSToPrecompiledOS OSFreeBSD = PBSD
 type ControllerOS = PrecompiledOS
 type HostOS = PrecompiledOS
 
-getControllerOS :: PrecompiledOS
+getControllerOS :: Either String PrecompiledOS
 getControllerOS = case os of
-	"linux" -> PLinux
-	"freebsd" -> PBSD
-	"kfreebsdgnu" -> PBSD
-	h -> error $ "Unknown OS: " ++ h
+	"linux" -> Right PLinux
+	"freebsd" -> Right PBSD
+	"kfreebsdgnu" -> Right PBSD
+	o -> Left ("Unknown OS: " ++ o)
 	-- TODO: add other oses
 
 compatibleOS :: ControllerOS -> HostOS -> Bool
 compatibleOS x y = x == y
 
 isPrecompilable :: System -> Bool
-isPrecompilable s@(System _ harch) = compatibleArch carch harch && compatibleOS cos' hos
+isPrecompilable s@(System _ harch) = case (getControllerArchitecture, getControllerOS) of
+	(Right carch, Right cos') -> compatibleArch carch harch && compatibleOS cos' hos
+	_ -> False
   where
-	carch = getControllerArchitecture
-	cos' = getControllerOS
 	hos = targetOSToPrecompiledOS (systemToTargetOS s)
