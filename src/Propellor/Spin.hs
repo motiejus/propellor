@@ -85,6 +85,9 @@ spin' mprivdata relay target hst = do
 		(Just Precompiled, Just True) -> do
 			sendPrecompiled target
 			updateserver cacheparams sshtarget (Just Precompiled)
+		(Just Precompiled, Just False) -> do
+			warningMessage $ "Your controller and your host do not seem to be compatible for precompilation, uploading the source code to your host and compiling it instead."
+			updateserver cacheparams sshtarget Nothing
 		_ -> updateserver cacheparams sshtarget Nothing
 
 	-- And now we can run it.
