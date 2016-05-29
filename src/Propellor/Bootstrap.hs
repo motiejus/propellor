@@ -60,7 +60,7 @@ depsCommand msys = "( " ++ intercalate " ; " (concat [osinstall, cabalinstall]) 
   where
 	osinstall = case msys of
 		Just (System (FreeBSD _) _) -> map pkginstall fbsddeps
-		Just (System (Debian _) _) -> useapt
+		Just (System (Debian _ _) _) -> useapt
 		Just (System (Buntish _) _) -> useapt
 		-- assume a debian derived system when not specified
 		Nothing -> useapt
@@ -115,7 +115,7 @@ depsCommand msys = "( " ++ intercalate " ; " (concat [osinstall, cabalinstall]) 
 
 installGitCommand :: Maybe System -> ShellCommand
 installGitCommand msys = case msys of
-	(Just (System (Debian _) _)) -> use apt
+	(Just (System (Debian _ _) _)) -> use apt
 	(Just (System (Buntish _) _)) -> use apt
 	(Just (System (FreeBSD _) _)) -> use
 		[ "ASSUME_ALWAYS_YES=yes pkg update"
