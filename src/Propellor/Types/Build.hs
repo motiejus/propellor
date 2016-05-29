@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 module Propellor.Types.Build where
 
 import Data.Typeable
