@@ -18,7 +18,12 @@ import System.Info (arch, os)
 -- it's not compatable.
 --
 -- Note that sending precompiled propellor binaries can use significantly
--- more bandwidth than using source code.
+-- more bandwidth than using source code. 
+--
+-- Also, using `Propellor.Property.Cron.runPropellor` on a host with a
+-- precompiled propellor won't cause changes pushed to your propellor git
+-- repository to update, as the host will continue using the precompiled
+-- propellor it was sent.
 precompiled :: Property (HasInfo + UnixLike)
 precompiled = pureInfoProperty "Set build state as precompiled" (InfoVal Precompiled)
 
