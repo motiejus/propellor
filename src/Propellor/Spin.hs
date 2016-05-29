@@ -81,13 +81,12 @@ spin' mprivdata relay target hst = do
 		Nothing -> getSshTarget target hst
 
 	-- Install, or update the remote propellor.
-	case (build, isPrecompilable <$> sys) of
+	case (buildmethod, isPrecompilable <$> sys) of
 		(Just Precompiled, Just True) -> do
 			sendPrecompiled target
 			updateserver cacheparams sshtarget (Just Precompiled)
 		(Just Precompiled, Just False) -> do
-			warningMessage $ "Your controller and your host do not seem to be compatible for precompilation, uploading the source code to your host and compiling it instead."
-			updateserver cacheparams sshtarget Nothing
+			error $ target ++ " is configured to use a precompiled propellor binary, but this host is not able to compile binaries that will work on " ++ target
 		_ -> updateserver cacheparams sshtarget Nothing
 
 	-- And now we can run it.
@@ -99,8 +98,8 @@ spin' mprivdata relay target hst = do
 		InfoVal o -> Just o
 		NoInfoVal -> Nothing
 
-	build :: Maybe Build
-	build = case fromInfo (hostInfo hst) of
+	buildmethod :: Maybe Build
+	buildmethod = case fromInfo (hostInfo hst) of
 		InfoVal o -> Just o
 		NoInfoVal -> Nothing
 

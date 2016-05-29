@@ -9,7 +9,16 @@ import Propellor.Types.Info
 import System.Info (arch, os)
 
 -- | Specifies that propellor should be precompiled before being sent and
--- executed on the remote host
+-- executed on the remote host.
+--
+-- For precompilation to work, the controller that is building and running
+-- propellor must have a compatable architecture as the host that the
+-- precompiled propellor will run on. This is checked before sending the
+-- precompiled binary, and spinning a precompiled host will abort if
+-- it's not compatable.
+--
+-- Note that sending precompiled propellor binaries can use significantly
+-- more bandwidth than using source code.
 precompiled :: Property (HasInfo + UnixLike)
 precompiled = pureInfoProperty "Set build state as precompiled" (InfoVal Precompiled)
 
