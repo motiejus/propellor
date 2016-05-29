@@ -11,7 +11,7 @@ import System.Info (arch, os)
 -- | Specifies that propellor should be precompiled before being sent and
 -- executed on the remote host
 precompiled :: Property (HasInfo + UnixLike)
-precompiled = pureInfoProperty ("Set build state as precompiled") (InfoVal Precompiled)
+precompiled = pureInfoProperty "Set build state as precompiled" (InfoVal Precompiled)
 
 type ControllerArchitecture = Architecture
 type HostArchitecture = Architecture
@@ -47,13 +47,15 @@ compatibleArch x y | x == y = True
 compatibleArch X86_32 X86_64 = True
 compatibleArch _ _ = False
 
-data PrecompiledOS = PLinux | PBSD
+data PrecompiledOS = PLinux | PBSD | PHurd
 	deriving (Eq, Show)
 
-targetOSToPrecompiledOS :: TargetOS -> PrecompiledOS
-targetOSToPrecompiledOS OSDebian = PLinux
-targetOSToPrecompiledOS OSBuntish = PLinux
-targetOSToPrecompiledOS OSFreeBSD = PBSD
+systemToPrecompiledOS :: System -> PrecompiledOS
+systemToPrecompiledOS (System (Debian Linux _) _) = PLinux
+systemToPrecompiledOS (System (Debian KFreeBSD _) _) = PBSD
+systemToPrecompiledOS (System (Debian Hurd _) _) = PHurd
+systemToPrecompiledOS (System (Buntish _) _) = PLinux
+systemToPrecompiledOS (System (FreeBSD _) _) = PBSD
 
 type ControllerOS = PrecompiledOS
 type HostOS = PrecompiledOS
@@ -63,8 +65,9 @@ getControllerOS = case os of
 	"linux" -> Right PLinux
 	"freebsd" -> Right PBSD
 	"kfreebsdgnu" -> Right PBSD
+	"hurd" -> Right PHurd
+	"gnu" -> Right PHurd
 	o -> Left ("Unknown OS: " ++ o)
-	-- TODO: add other oses
 
 compatibleOS :: ControllerOS -> HostOS -> Bool
 compatibleOS x y = x == y
@@ -74,4 +77,4 @@ isPrecompilable s@(System _ harch) = case (getControllerArchitecture, getControl
 	(Right carch, Right cos') -> compatibleArch carch harch && compatibleOS cos' hos
 	_ -> False
   where
-	hos = targetOSToPrecompiledOS (systemToTargetOS s)
+	hos = systemToPrecompiledOS s
