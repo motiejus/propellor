@@ -172,13 +172,16 @@ unknownhost h hosts = errorMessage $ unlines
 -- The Host should only be provided when dependencies should be installed
 -- as needed to build propellor.
 buildFirst :: Maybe Host -> CanRebuild -> CmdLine -> IO () -> IO ()
-buildFirst h CanRebuild cmdline next = do
-	oldtime <- getmtime
-	buildPropellor h
-	newtime <- getmtime
-	if newtime == oldtime
-		then next
-		else continueAfterBuild cmdline
+buildFirst h CanRebuild cmdline next = ifM hasGitRepo
+	( do
+		oldtime <- getmtime
+		buildPropellor h
+		newtime <- getmtime
+		if newtime == oldtime
+			then next
+			else continueAfterBuild cmdline
+	, next
+	)
   where
 	getmtime = catchMaybeIO $ getModificationTime "propellor"
 buildFirst _ NoRebuild _ next = next
@@ -194,12 +197,12 @@ continueAfterBuild cmdline = go =<< boolSystem "./propellor"
 
 fetchFirst :: IO () -> IO ()
 fetchFirst next = do
-	whenM hasOrigin $
+	whenM (hasGitRepo <&&> hasOrigin) $
 		void fetchOrigin
 	next
 
 updateFirst :: Maybe Host -> CanRebuild -> CmdLine -> IO () -> IO ()
-updateFirst h canrebuild cmdline next = ifM hasOrigin
+updateFirst h canrebuild cmdline next = ifM (hasGitRepo <&&> hasOrigin)
 	( updateFirst' h canrebuild cmdline next
 	, next
 	)
