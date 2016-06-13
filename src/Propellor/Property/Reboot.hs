@@ -13,6 +13,13 @@ import Text.ParserCombinators.ReadP
 
 type KernelVersion = String
 
+-- | Using this property causes an immediate reboot.
+-- 
+-- So, this is not a useful property on its own, but it can be useful to
+-- compose with other properties. For example:
+--
+-- > Apt.installed ["new-kernel"]
+-- >	`onChange` Reboot.now
 now :: Property Linux
 now = tightenTargets $ cmdProperty "reboot" []
 	`assume` MadeChange
@@ -27,7 +34,7 @@ type Force = Bool
 --
 -- The reboot can be forced to run, which bypasses the init system. Useful
 -- if the init system might not be running for some reason.
-atEnd :: Bool -> (Result -> Bool) -> Property Linux
+atEnd :: Force -> (Result -> Bool) -> Property Linux
 atEnd force resultok = property "scheduled reboot at end of propellor run" $ do
 	endAction "rebooting" atend
 	return NoChange
@@ -46,7 +53,8 @@ atEnd force resultok = property "scheduled reboot at end of propellor run" $ do
 -- running.
 --
 -- This will only work if you have taken measures to ensure that the other
--- kernel won't just get booted again.  See 'Propellor.Property.DigitalOcean'
+-- kernel won't just get booted again.
+-- See 'Propellor.Property.HostingProvider.DigitalOcean'
 -- for an example of how to do this.
 toDistroKernel :: Property DebianLike
 toDistroKernel = check (not <$> runningInstalledKernel) now
