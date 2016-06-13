@@ -309,7 +309,8 @@ sendGitClone hn = void $ actionMessage ("Clone git repository to " ++ hn) $ do
   where
 	remotebundle = "/usr/local/propellor.git"
 	unpackcmd branch = shellWrap $ intercalate " && "
-		[ "git clone " ++ remotebundle ++ " " ++ localdir
+		[ "rm -rf " ++ localdir
+		, "git clone " ++ remotebundle ++ " " ++ localdir
 		, "cd " ++ localdir
 		, "git checkout -b " ++ branch
 		, "git remote rm origin"
@@ -347,7 +348,8 @@ sendPrecompiled hn = void $ actionMessage "Uploading locally compiled propellor 
 	remotetarball = "/usr/local/propellor.tar"
 
 	unpackcmd = shellWrap $ intercalate " && "
-		[ "cd " ++ takeDirectory remotetarball
+		[ "rm -rf " ++ localdir
+		, "cd " ++ takeDirectory remotetarball
 		, "tar xzf " ++ remotetarball
 		, "rm -f " ++ remotetarball
 		]
