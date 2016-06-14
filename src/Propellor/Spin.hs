@@ -348,7 +348,7 @@ sendPrecompiled hn = void $ actionMessage "Uploading locally compiled propellor 
 	remotetarball = "/usr/local/propellor.tar"
 
 	unpackcmd = shellWrap $ intercalate " && "
-		[ "rm -rf " ++ localdir
+		[ "rm -rf " ++ localdir </> ".git"
 		, "cd " ++ takeDirectory remotetarball
 		, "tar xzf " ++ remotetarball
 		, "rm -f " ++ remotetarball
