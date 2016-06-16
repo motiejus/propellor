@@ -13,7 +13,7 @@ import qualified Propellor.Property.File as File
 installed :: Property DebianLike
 installed = Apt.installed ["firejail"]
 
--- | For each program name passed, create symlinks in /usr/local/bin that
+-- | For each program name passed, create symlinks in @/usr/local/bin@ that
 -- will launch that program in a Firejail sandbox.
 --
 -- The profile for the sandbox will be the same as if the user had run
@@ -22,9 +22,7 @@ installed = Apt.installed ["firejail"]
 --
 -- See "DESKTOP INTEGRATION" in firejail(1).
 jailed :: [String] -> Property DebianLike
-jailed ps = mconcat (map jailed' ps)
-	`requires` installed
-	`describe` unwords ("firejail jailed":ps)
+jailed ps = (jailed' `applyToList` ps) `requires` installed
 
 jailed' :: String -> Property UnixLike
 jailed' p = ("/usr/local/bin" </> p)
