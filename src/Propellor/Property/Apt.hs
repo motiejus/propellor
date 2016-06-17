@@ -241,7 +241,8 @@ installedMin :: [Package] -> Property DebianLike
 installedMin = installed' ["--no-install-recommends", "-y"]
 
 removed :: [Package] -> Property DebianLike
-removed ps = check (or <$> isInstalled' ps) (runApt (["-y", "remove"] ++ ps))
+removed ps = check (any (== IsInstalled) <$> getInstallStatus ps)
+	(runApt (["-y", "remove"] ++ ps))
 	`describe` unwords ("apt removed":ps)
 
 buildDep :: [Package] -> Property DebianLike
@@ -267,9 +268,7 @@ robustly :: Property DebianLike -> Property DebianLike
 robustly p = p `fallback` (update `before` p)
 
 isInstallable :: [Package] -> IO Bool
-isInstallable ps = do
-	l <- isInstalled' ps
-	return $ elem False l && not (null l)
+isInstallable ps = any (== NotInstalled) <$> getInstallStatus ps
 
 isInstalled :: Package -> IO Bool
 isInstalled p = isInstalled' [p]
