@@ -10,7 +10,6 @@ import Utility.Exception
 import Control.Exception (AsyncException)
 import Control.Monad.Catch
 import Control.Monad.IO.Class (MonadIO)
-import Control.Applicative
 import Prelude
 
 -- | Catches all exceptions (except for `StopPropellorException` and
@@ -32,8 +31,5 @@ catchPropellor' a onerr = a `catches`
 
 -- | Catches all exceptions (except for `StopPropellorException` and
 -- `AsyncException`).
-tryPropellor
-	:: (Functor m, Applicative m, MonadCatch m)
-	=> m a
-	-> m (Either SomeException a)
-tryPropellor a = (Right <$> a) `catchPropellor'` (pure . Left)
+tryPropellor :: MonadCatch m => m a -> m (Either SomeException a)
+tryPropellor a = fmap Right a `catchPropellor'` (return . Left)
