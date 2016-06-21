@@ -13,10 +13,9 @@ import Control.Exception (SomeAsyncException)
 #endif
 import Control.Monad.Catch
 import Control.Monad.IO.Class (MonadIO)
-import Prelude
 
 -- | Catches all exceptions (except for `StopPropellorException` and
--- `AsyncException` and `SomeAsyncException`) and returns FailedChange.
+-- `AsyncException`) and returns FailedChange.
 catchPropellor :: (MonadIO m, MonadCatch m) => m Result -> m Result
 catchPropellor a = either err return =<< tryPropellor a
   where
@@ -35,4 +34,4 @@ catchPropellor' a onerr = a `catches`
 -- | Catches all exceptions (except for `StopPropellorException` and
 -- `AsyncException`).
 tryPropellor :: MonadCatch m => m a -> m (Either SomeException a)
-tryPropellor a = (return . Right =<< a) `catchPropellor'` (return . Left)
+tryPropellor a = (Right <$> a) `catchPropellor'` (pure . Left)
