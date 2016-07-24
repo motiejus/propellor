@@ -192,6 +192,8 @@ propellor (3.1.2) unstable; urgency=medium
   [ Joey Hess ]
   * Ssh.knownHost: Bug fix: Only fix up the owner of the known_hosts
     file after it exists.
+  * Sbuild.keypairInsecurelyGenerated: Improved to be more robust.
+    Thanks, Sean Whitton.
 
   [ Sean Whitton ]
   * Sbuild.keypairInsecurelyGenerated: Improved to be more robust.
