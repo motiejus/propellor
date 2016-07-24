@@ -270,7 +270,7 @@ propellor (3.1.0) unstable; urgency=medium
     previous version of propellor added, though.
   * Sbuild.keypairGenerated works around Debian bug #792100 by creating the
     directory /root/.gnupg in advance.
-  * Ccache.hasCache now sets the setgid bit on the cache directory, as 
+  * Ccache.hasCache now sets the setgid bit on the cache directory, as
     ccache requires.
 
   [ Sean Whitton ]
