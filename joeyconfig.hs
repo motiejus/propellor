@@ -58,7 +58,8 @@ hosts =                 --                  (o)  `
 	, elephant
 	, beaver
 	, pell
-	, keysafe
+	, k1
+	, iabak
 	] ++ monsters
 
 testvm :: Host
@@ -454,6 +455,19 @@ pell = host "pell.branchable.com" $ props
 	& Apt.unattendedUpgrades
 	& Branchable.server hosts
 	& Linode.serialGrub
+
+k1 :: Host
+k1 = host "k1.kitenet.net" $ props
+	& ipv4 "139.59.17.168"
+	& Hostname.sane
+	& osDebian (Stable "jessie") X86_64
+	& Cron.runPropellor (Cron.Times "30 * * * *")
+	& Apt.stdSourcesList `onChange` Apt.upgrade
+	& Apt.installed ["openssh-server"]
+	& Ssh.noPasswords
+	& Apt.installed ["etckeeper", "sudo"]
+	& User.hasSomePassword (User "root")
+	& User.hasSomePassword (User "joey")
 
 iabak :: Host
 iabak = host "iabak.archiveteam.org" $ props
