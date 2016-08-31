@@ -461,6 +461,7 @@ k1 = host "k1.kitenet.net" $ props
 	& ipv4 "139.59.17.168"
 	& Hostname.sane
 	& osDebian (Stable "jessie") X86_64
+	& DigitalOcean.distroKernel
 	& Cron.runPropellor (Cron.Times "30 * * * *")
 	& Apt.stdSourcesList `onChange` Apt.upgrade
 	& Apt.installed ["openssh-server"]
