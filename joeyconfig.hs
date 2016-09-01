@@ -484,6 +484,8 @@ keysafe = host "keysafe.joeyh.name" $ props
 	& Ssh.noPasswords
 
 	& Tor.installed
+	& Tor.hiddenServiceAvailable "keysafe" (Port 4242)
+		`requires` Tor.hiddenServiceData "keysafe" hostContext
 	-- keysafe installed manually until package is available
 
 iabak :: Host
