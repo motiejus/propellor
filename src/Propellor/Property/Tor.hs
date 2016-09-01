@@ -119,15 +119,7 @@ bandwidthRate' s divby = case readSize dataUnits s of
 			`describe` ("tor BandwidthRate " ++ v)
 	Nothing -> property ("unable to parse " ++ s) noChange
 
-hiddenServiceAvailable :: HiddenServiceName -> Port -> Property DebianLike
-hiddenServiceAvailable hn port = hiddenServiceHostName $ hiddenService hn port
-  where
-	hiddenServiceHostName p =  adjustPropertySatisfy p $ \satisfy -> do
-		r <- satisfy
-		h <- liftIO $ readFile (varLib </> hn </> "hostname")
-		warningMessage $ unwords ["hidden service hostname:", h]
-		return r
-
+-- | Enables a hidden service for a given port.
 hiddenService :: HiddenServiceName -> Port -> Property DebianLike
 hiddenService hn (Port port) = ConfFile.adjustSection
 	(unwords ["hidden service", hn, "available on port", show port])
@@ -143,6 +135,18 @@ hiddenService hn (Port port) = ConfFile.adjustSection
 	ports' = sort ports
 	onionport port = unwords ["HiddenServicePort", val port, "127.0.0.1:" ++ val port]
 
+-- | Same as `hiddenService` but also causes propellor to display
+-- the onion address of the hidden service.
+hiddenServiceAvailable :: HiddenServiceName -> Port -> Property DebianLike
+hiddenServiceAvailable hn port = hiddenServiceHostName $ hiddenService hn port
+  where
+	hiddenServiceHostName p =  adjustPropertySatisfy p $ \satisfy -> do
+		r <- satisfy
+		h <- liftIO $ readFile (varLib </> hn </> "hostname")
+		warningMessage $ unwords ["hidden service hostname:", h]
+		return r
+
+-- | 
 hiddenServiceData :: IsContext c => HiddenServiceName -> c -> Property (HasInfo + DebianLike)
 hiddenServiceData hn context = combineProperties desc $ props
 	& installonion "hostname"
