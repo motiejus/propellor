@@ -259,6 +259,7 @@ kite = host "kite.kitenet.net" $ props
 
 	& Network.static "eth0" `requires` Network.cleanInterfacesFile
 	& Apt.installed ["linux-image-amd64"]
+	& Linode.serialGrub
 	& Linode.mlocateEnabled
 	& Apt.unattendedUpgrades
 	& Systemd.installed
