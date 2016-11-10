@@ -15,4 +15,4 @@ exists (Group group') mgid = check test (cmdProperty "addgroup" (args mgid))
 	args (Just gid) = ["--gid", show gid, group']
 
 hasUser :: Group -> User -> Property DebianLike
-hasUser = flip hasGroup
+hasUser (Group group') (User user) = hasGroup user group'
