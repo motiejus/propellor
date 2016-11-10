@@ -525,7 +525,10 @@ iabak = host "iabak.archiveteam.org" $ props
 	& Apt.serviceInstalledRunning "swapspace"
 	& Cron.runPropellor (Cron.Times "30 * * * *")
 	& Apt.installed ["etckeeper", "sudo"]
-	& Apt.installed ["vim", "screen", "tmux", "less", "emax-nox", "netcat", "python3", "python3-aiohttp"]
+	-- vital but generic tools
+	& Apt.installed ["vim", "screen", "tmux", "less", "emacs-nox", "netcat", "nano"]
+	-- tools for creating shards
+	& Apt.installed ["jq", "python3", "python3-aiohttp"]
 	& User.hasSomePassword (User "root")
 	& propertyList "admin accounts"
 		(toProps $ map User.accountFor admins
@@ -537,7 +540,6 @@ iabak = host "iabak.archiveteam.org" $ props
 	& Ssh.authorizedKey (User "db48x") "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJQkqIgZ7D8WHW5Y3o+fpZC/4xtv/3IQrORJrTPCt7KY db48x@erebor"
 	& Ssh.authorizedKey (User "hcross") "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP5OhU2Lita9RdjPkX9N0w9wZnmVlednUDEx24bVn4Mk IABAK key - Harry C"
 	& Ssh.authorizedKey (User "kaz") "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHhFYMd9Htlf9wPZzIDyqbYYNwuo3m+kWQ9/pfAD/TE9 Kaz IABAK"
-	& Apt.installed ["sudo"]
 	& Ssh.noPasswords
 
 	& Tor.installed
