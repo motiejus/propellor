@@ -513,6 +513,7 @@ kiteMailServer = propertyList "kitenet.net mail server" $ props
 	& Fail2Ban.jailEnabled "postfix-sasl"
 	& "/etc/default/saslauthd" `File.containsLine` "MECHANISMS=sasldb"
 	& Postfix.saslPasswdSet "kitenet.net" (User "errol")
+	& Postfix.saslPasswdSet "kitenet.net" (User "joey")
 
 	& Apt.installed ["maildrop"]
 	& "/etc/maildroprc" `File.hasContent`
