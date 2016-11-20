@@ -51,10 +51,12 @@ built :: FilePath -> System -> DebootstrapConfig -> Property Linux
 built target system config = built' (setupRevertableProperty installed) target system config
 
 built' :: Property Linux -> FilePath -> System -> DebootstrapConfig -> Property Linux
-built' installprop target system@(System _ arch) config =
-	check (unpopulated target <||> ispartial) setupprop
-		`requires` installprop
+built' installprop target system@(System _ arch) config = 
+	go `before` oldpermfix
   where
+	go = check (unpopulated target <||> ispartial) setupprop
+		`requires` installprop
+
 	setupprop :: Property Linux
 	setupprop = property ("debootstrapped " ++ target) $ liftIO $ do
 		createDirectoryIfMissing True target
@@ -81,6 +83,15 @@ built' installprop target system@(System _ arch) config =
 			return True
 		, return False
 		)
+	
+	-- May want to remove this after some appropriate length of time,
+	-- as it's a workaround for chroots set up with too tight
+	-- permissions.
+	oldpermfix :: Property Linux
+	oldpermfix = property ("fixed old chroot file mode") $ do
+		liftIO $ modifyFileMode target $
+			addModes [otherReadMode, otherExecuteMode]
+		return NoChange
 
 extractSuite :: System -> Maybe String
 extractSuite (System (Debian _ s) _) = Just $ Apt.showSuite s
