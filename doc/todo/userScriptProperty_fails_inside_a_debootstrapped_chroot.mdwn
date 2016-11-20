@@ -21,5 +21,3 @@ I can obtain the error manually as follows.  My `/tmp` is not mounted `noexec`.
     Cannot execute /bin/sh: Permission denied
 
 --spwhitton
-
-> [[fixed|done]] --[[Joey]]
