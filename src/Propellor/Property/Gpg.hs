@@ -34,7 +34,6 @@ keyImported key@(GpgKeyId keyid) user@(User u) = prop
 				( return NoChange
 				, makeChange $ withHandle StdinHandle createProcessSuccess
 					(proc "su" ["-c", "gpg --import", u]) $ \h -> do
-						fileEncoding h
 						hPutStr h (unlines keylines)
 						hClose h
 				)

@@ -19,7 +19,6 @@ module Utility.FileSystemEncoding (
 	encodeW8NUL,
 	decodeW8NUL,
 	truncateFilePath,
-	setConsoleEncoding,
 ) where
 
 import qualified GHC.Foreign as GHC
@@ -176,10 +175,3 @@ truncateFilePath n = reverse . go [] n . L8.fromString
 					else go (c:coll) (cnt - x') (L8.drop 1 bs)
 			_ -> coll
 #endif
-
-{- This avoids ghc's output layer crashing on invalid encoded characters in
- - filenames when printing them out. -}
-setConsoleEncoding :: IO ()
-setConsoleEncoding = do
-	fileEncoding stdout
-	fileEncoding stderr

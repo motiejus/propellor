@@ -58,6 +58,6 @@ myVal envvars extract = go envvars
 #ifndef mingw32_HOST_OS
 	go [] = Right . extract <$> (getUserEntryForID =<< getEffectiveUserID)
 #else
-	go [] = extract <$> error ("environment not set: " ++ show envvars)
+	go [] = return $ Left ("environment not set: " ++ show envvars)
 #endif
 	go (v:vs) = maybe (go vs) (return . Right) =<< getEnv v

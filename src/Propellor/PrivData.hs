@@ -57,7 +57,6 @@ import Utility.Misc
 import Utility.FileMode
 import Utility.Env
 import Utility.Table
-import Utility.FileSystemEncoding
 import Utility.Directory
 
 -- | Allows a Property to access the value of a specific PrivDataField,
@@ -273,7 +272,7 @@ readPrivData :: String -> PrivMap
 readPrivData = fromMaybe M.empty . readish
 
 readPrivDataFile :: FilePath -> IO PrivMap
-readPrivDataFile f = readPrivData <$> readFileStrictAnyEncoding f
+readPrivDataFile f = readPrivData <$> readFileStrict f
 
 makePrivDataDir :: IO ()
 makePrivDataDir = createDirectoryIfMissing False privDataDir
