@@ -27,6 +27,7 @@ usage h = hPutStrLn h $ unlines
 	, "  propellor --init"
 	, "  propellor"
 	, "  propellor --spin targethost [--via relayhost]"
+	, "  propellor --build"
 	, "  propellor --add-key keyid"
 	, "  propellor --rm-key keyid"
 	, "  propellor --list-fields"
