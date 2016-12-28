@@ -2,6 +2,8 @@ propellor (3.2.4) UNRELEASED; urgency=medium
 
   * GHC's fileSystemEncoding is used for all String IO, to avoid
     encoding-related crashes in eg, Propellor.Property.File.
+  * Add --build option to simply build config.hs.
+  * More informative usage message. Thanks, Daniel Brooks
 
  -- Joey Hess <id@joeyh.name>  Sat, 24 Dec 2016 15:06:36 -0400
 
@@ -137,7 +139,7 @@ propellor (3.1.0) unstable; urgency=medium
     previous version of propellor added, though.
   * Sbuild.keypairGenerated works around Debian bug #792100 by creating the
     directory /root/.gnupg in advance.
-  * Ccache.hasCache now sets the setgid bit on the cache directory, as 
+  * Ccache.hasCache now sets the setgid bit on the cache directory, as
     ccache requires.
 
  -- Joey Hess <id@joeyh.name>  Wed, 22 Jun 2016 15:29:27 -0400
@@ -240,7 +242,7 @@ propellor (3.0.0) unstable; urgency=medium
  		go = property "foo" (return NoChange)
       To fix, specify the type of go:
  	  	go :: Property UnixLike
-    - `ensureProperty` now needs to be passed a witness to the type of the 
+    - `ensureProperty` now needs to be passed a witness to the type of the
       property it's used in.
       change this:  foo = property desc $ ... ensureProperty bar
       to this:      foo = property' desc $ \w -> ... ensureProperty w bar
@@ -276,7 +278,7 @@ propellor (3.0.0) unstable; urgency=medium
 propellor (2.17.2) unstable; urgency=medium
 
   * When new dependencies are added to propellor or the propellor config,
-    try harder to get them installed. In particular, this makes 
+    try harder to get them installed. In particular, this makes
     propellor --spin work when the remote host needs to get dependencies
     installed in order to build the updated config.
   * Apt.update: Also run dpkg --configure -a here as apt for some reason
@@ -289,7 +291,7 @@ propellor (2.17.1) unstable; urgency=medium
   * Avoid generating excessively long paths to the unix socket file
     used for ssh connection caching. Mostly. Can still generate a too long
     one if $HOME is longer than 60 bytes.
-  * Uwsgi: add ".ini" extension to app config files. 
+  * Uwsgi: add ".ini" extension to app config files.
     Files without extensions were ignored by uwsgi.
     Thanks, Félix Sipma.
 
@@ -545,7 +547,7 @@ propellor (2.9.0) unstable; urgency=medium
     keys, the new Ssh.userKeys and Ssh.userKeyAt properties will
     always update out of date key files.
   * Ssh.pubKey renamed to Ssh.hostPubKey. (API change)
-  * Added --unset-unused 
+  * Added --unset-unused
   * Fix typo: propigate → propagate. Thanks, Felix Gruber.
     (A minor API change)
   * Chroot: Converted to use a ChrootBootstrapper type class, so
@@ -740,7 +742,7 @@ propellor (2.2.0) unstable; urgency=medium
 
   * When running shimmed (eg in a docker container),
     improve process name visible in ps.
-  * Add shebang to cron.daily etc files. 
+  * Add shebang to cron.daily etc files.
   * Some changes to tor configuration, minor API change.
   * Propellor now builds itself, and gets its build dependencies installed
     when deploying to a new host, without needing the Makefile.
@@ -749,7 +751,7 @@ propellor (2.2.0) unstable; urgency=medium
 
 propellor (2.1.0) unstable; urgency=medium
 
-  * Additional tor properties, including support for making relays, 
+  * Additional tor properties, including support for making relays,
     and naming bridges, relays, etc.
   * New Cron.Times data type, which allows Cron.job to install
     daily/monthly/weekly jobs that anacron can run. (API change)
@@ -834,7 +836,7 @@ propellor (1.2.2) unstable; urgency=medium
 
 propellor (1.2.1) unstable; urgency=medium
 
-  * Added CryptPassword to PrivDataField, for password hashes as produced 
+  * Added CryptPassword to PrivDataField, for password hashes as produced
     by crypt(3).
   * User.hasPassword and User.hasSomePassword will now use either
     a CryptPassword or a Password from privdata, depending on which is set.
@@ -864,7 +866,7 @@ propellor (1.1.0) unstable; urgency=medium
     commit.
   * Hostname parameters not containing dots are looked up in the DNS to
     find the full hostname.
-  * propellor --spin can now deploy propellor to hosts that do not have 
+  * propellor --spin can now deploy propellor to hosts that do not have
     git, ghc, or apt-get. This is accomplished by uploading a fairly
     portable precompiled tarball of propellor.
   * Propellor.Property.OS contains properties that can be used to do a clean
@@ -931,7 +933,7 @@ propellor (0.9.2) unstable; urgency=medium
 propellor (0.9.1) unstable; urgency=medium
 
   * Docker: Add ability to control when containers restart.
-  * Docker: Default to always restarting containers, so they come back 
+  * Docker: Default to always restarting containers, so they come back
     up after reboots and docker daemon upgrades. (API change)
   * Fix loop when a docker host that does not exist was docked.
 
