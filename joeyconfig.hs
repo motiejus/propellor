@@ -188,7 +188,13 @@ oyster = host "oyster.kitenet.net" $ props
 baleen :: Host
 baleen = host "baleen.kitenet.net" $ props
 	& standardSystem Unstable X86_64 [ "New git-annex build box." ]
+
 	-- Not on public network; ssh access via bounce host.
+	& ipv4 "138.38.77.40"
+	
+	-- The root filesystem content may be lost if the VM is resized.
+	-- /dev/vdb contains persistent storage.
+	& Fstab.mounted "auto" "/dev/vdb" "/var/lib/container" mempty
 	
 	& Apt.unattendedUpgrades
 	& Postfix.satellite
