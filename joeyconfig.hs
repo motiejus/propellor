@@ -185,6 +185,16 @@ oyster = host "oyster.kitenet.net" $ props
 	-- block 22.
 	& Ssh.listenPort (Port 80)
 
+baleen :: Host
+baleen = host "baleen.kitenet.net" $ props
+	& standardSystem Unstable X86_64 [ "New git-annex build box." ]
+	-- Not on public network; ssh access via bounce host.
+	
+	& Apt.unattendedUpgrades
+	& Postfix.satellite
+	& Apt.serviceInstalledRunning "ntp"
+	& Systemd.persistentJournal
+
 orca :: Host
 orca = host "orca.kitenet.net" $ props
 	& standardSystem Unstable X86_64 [ "Main git-annex build box." ]
