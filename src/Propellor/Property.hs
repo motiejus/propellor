@@ -266,7 +266,7 @@ isNewerThan x y = do
 --
 -- For example:
 --
--- > upgraded :: UnixLike
+-- > upgraded :: Property (DebianLike + FreeBSD)
 -- > upgraded = (Apt.upgraded `pickOS` Pkg.upgraded)
 -- > 	`describe` "OS upgraded"
 --
