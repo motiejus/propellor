@@ -145,7 +145,7 @@ userGroup :: User -> Group
 userGroup (User u) = Group u
 
 newtype Port = Port Int
-	deriving (Eq, Show)
+	deriving (Eq, Ord, Show)
 
 fromPort :: Port -> String
 fromPort (Port p) = show p
