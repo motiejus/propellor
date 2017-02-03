@@ -69,8 +69,8 @@ import Data.List.Utils
 import qualified Data.Map as M
 import System.Console.Concurrent
 
-installed :: Property DebianLike
-installed = Apt.installed ["docker.io"]
+installed :: Property (DebianLike + ArchLinux)
+installed = Apt.installed ["docker.io"] `pickOS` Pacman.installed ["docker"]
 
 -- | Configures docker with an authentication file, so that images can be
 -- pushed to index.docker.io. Optional.
