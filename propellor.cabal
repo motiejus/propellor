@@ -58,7 +58,7 @@ Executable propellor-config
     GHC-Options: -fno-warn-redundant-constraints
   Extensions: TypeOperators
   Hs-Source-Dirs: src
-  Build-Depends: 
+  Build-Depends:
     base >= 4.5, base < 5,
     MissingH, directory, filepath, IfElse, process, bytestring, hslogger,
     unix, unix-compat, ansi-terminal, containers (>= 0.5), network, async,
@@ -70,7 +70,7 @@ Library
     GHC-Options: -fno-warn-redundant-constraints
   Extensions: TypeOperators
   Hs-Source-Dirs: src
-  Build-Depends: 
+  Build-Depends:
     base >= 4.5, base < 5,
     MissingH, directory, filepath, IfElse, process, bytestring, hslogger,
     unix, unix-compat, ansi-terminal, containers (>= 0.5), network, async,
