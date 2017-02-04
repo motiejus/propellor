@@ -314,7 +314,7 @@ buildDepIn dir = cmdPropertyEnv "sh" ["-c", cmd] noninteractiveEnv
 -- | The name of a package, a glob to match the names of packages, or a regexp
 -- surrounded by slashes to match the names of packages.  See
 -- apt_preferences(5), "Regular expressions and glob(7) syntax"
-type AptPrefPackage = String
+type AptPackagePref = String
 
 -- | Pins a list of packages, package wildcards and/or regular expressions to a
 -- list of suites and corresponding pin priorities (see apt_preferences(5)).
@@ -334,7 +334,7 @@ type AptPrefPackage = String
 --  > & Apt.suiteAvailablePinned Unstable (-10)
 --  > & ["elpa-*"] `Apt.pinnedTo` [(Testing, 100), (Unstable, 50)]
 pinnedTo
-	:: [AptPrefPackage]
+	:: [AptPackagePref]
 	-> [(DebianSuite, PinPriority)]
 	-> RevertableProperty Debian Debian
 pinnedTo ps pins = (\p -> pinnedTo' p pins) `applyToList` ps
@@ -343,7 +343,7 @@ pinnedTo ps pins = (\p -> pinnedTo' p pins) `applyToList` ps
 	showSuites = intercalate "," $ showSuite . fst <$> pins
 
 pinnedTo'
-	:: AptPrefPackage
+	:: AptPackagePref
 	-> [(DebianSuite, PinPriority)]
 	-> RevertableProperty Debian Debian
 pinnedTo' p pins =
@@ -519,7 +519,7 @@ suitePin s = prefix s ++ showSuite s
 	prefix (Stable _) = "n="
 	prefix _ = "a="
 
-suitePinBlock :: AptPrefPackage -> DebianSuite -> PinPriority -> [Line]
+suitePinBlock :: AptPackagePref -> DebianSuite -> PinPriority -> [Line]
 suitePinBlock p suite pin =
 	[ "Explanation: This file added by propellor"
 	, "Package: " ++ p
