@@ -94,8 +94,8 @@ binandsrc url suite = catMaybes
 		bs <- backportSuite suite
 		return $ debLine bs url stdSections
 
-stdArchiveLines :: Propellor SourcesGenerator
-stdArchiveLines = return . binandsrc =<< getMirror
+debCdn :: SourcesGenerator
+debCdn = binandsrc "http://deb.debian.org/debian"
 
 -- | Only available for Stable and Testing
 securityUpdates :: SourcesGenerator
@@ -107,9 +107,6 @@ securityUpdates suite
 
 -- | Makes sources.list have a standard content using the Debian mirror CDN,
 -- with the Debian suite configured by the os.
---
--- Since the CDN is sometimes unreliable, also adds backup lines using
--- kernel.org.
 stdSourcesList :: Property Debian
 stdSourcesList = withOS "standard sources.list" $ \w o -> case o of
 	(Just (System (Debian _ suite) _)) ->
@@ -128,42 +125,7 @@ stdSourcesList' suite more = tightenTargets $ setSourcesList
 	(concatMap (\gen -> gen suite) generators)
 	`describe` ("standard sources.list for " ++ show suite)
   where
-	generators u = [binandsrc u, securityUpdates] ++ more
-	desc = ("standard sources.list for " ++ show suite)
-
-type PinPriority = Int
-
--- | Adds an apt source for a suite, and pins that suite to a given pin value
--- (see apt_preferences(5)).  Revert to drop the source and unpin the suite.
---
--- If the requested suite is the host's OS suite, the suite is pinned, but no
--- source is added.  That apt source should already be available, or you can use
--- a property like 'Apt.stdSourcesList'.
-suiteAvailablePinned
-	:: DebianSuite
-	-> PinPriority
-	-> RevertableProperty Debian Debian
-suiteAvailablePinned s pin = available <!> unavailable
-  where
-	available :: Property Debian
-	available = tightenTargets $ combineProperties (desc True) $ props
-		& File.hasContent prefFile (suitePinBlock "*" s pin)
-		& setSourcesFile
-
-	unavailable :: Property Debian
-	unavailable = tightenTargets $ combineProperties (desc False) $ props
-		& File.notPresent sourcesFile
-			`onChange` update
-		& File.notPresent prefFile
-
-	setSourcesFile :: Property Debian
-	setSourcesFile = tightenTargets $ withMirror (desc True) $ \u ->
-		withOS (desc True) $ \w o -> case o of
-			(Just (System (Debian _ hostSuite) _))
-				| s /= hostSuite -> ensureProperty w $
-					File.hasContent sourcesFile (sources u)
-					`onChange` update
-			_ -> noChange
+	generators = [debCdn, securityUpdates] ++ more
 
 type PinPriority = Int
 
@@ -207,7 +169,7 @@ suiteAvailablePinned s pin = available <!> unavailable
 			| "-backports" `isSuffixOf` (showSuite s) = id
 			| otherwise = filter (not . isInfixOf "-backports")
 
-	generators = [debCdn, kernelOrg, securityUpdates]
+	generators = [debCdn, securityUpdates]
 	prefFile = "/etc/apt/preferences.d/20" ++ showSuite s ++ ".pref"
 	sourcesFile = "/etc/apt/sources.list.d/" ++ showSuite s ++ ".list"
 
