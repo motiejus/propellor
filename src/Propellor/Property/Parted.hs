@@ -95,7 +95,7 @@ newtype PartSize = MegaBytes Integer
 
 instance PartedVal PartSize where
 	pval (MegaBytes n)
-		| n > 0 = val n ++ "MB"
+		| n > 0 = show n ++ "MB"
 		-- parted can't make partitions smaller than 1MB;
 		-- avoid failure in edge cases
 		| otherwise = "1MB"

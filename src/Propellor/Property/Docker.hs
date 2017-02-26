@@ -660,7 +660,7 @@ listImages :: IO [ImageUID]
 listImages = map ImageUID . lines <$> readProcess dockercmd ["images", "--all", "--quiet"]
 
 runProp :: String -> RunParam -> Property (HasInfo + Linux)
-runProp field val = tightenTargets $ pureInfoProperty (param) $
+runProp field v = tightenTargets $ pureInfoProperty (param) $
 	mempty { _dockerRunParams = [DockerRunParam (\_ -> "--"++param)] }
   where
 	param = field++"="++v

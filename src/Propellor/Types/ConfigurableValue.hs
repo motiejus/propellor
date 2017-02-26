@@ -2,8 +2,6 @@
 
 module Propellor.Types.ConfigurableValue where
 
-import Data.Word
-
 -- | A value that can be used in a configuration file, or otherwise used to
 -- configure a program.
 --
@@ -18,7 +16,6 @@ import Data.Word
 class ConfigurableValue t where
 	val :: t -> String
 
--- | val String does not do any quoting, unlike show String
 instance ConfigurableValue String where
 	val = id
 
@@ -32,13 +29,4 @@ instance ConfigurableValue Float where
 	val = show
 
 instance ConfigurableValue Double where
-	val = show
-
-instance ConfigurableValue Word8 where
-	val = show
-
-instance ConfigurableValue Word16 where
-	val = show
-
-instance ConfigurableValue Word32 where
 	val = show

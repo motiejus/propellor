@@ -69,7 +69,7 @@ setSshdConfigBool :: ConfigKeyword -> Bool -> Property DebianLike
 setSshdConfigBool setting allowed = setSshdConfig setting (sshBool allowed)
 
 setSshdConfig :: ConfigKeyword -> String -> Property DebianLike
-setSshdConfig setting val = File.fileProperty desc f sshdConfig
+setSshdConfig setting v = File.fileProperty desc f sshdConfig
 	`onChange` restarted
   where
 	desc = unwords [ "ssh config:", setting, v ]
