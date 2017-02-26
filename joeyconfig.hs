@@ -254,11 +254,12 @@ honeybee = host "honeybee.kitenet.net" $ props
 	& Systemd.nspawned (GitAnnexBuilder.autoBuilderContainer
 		GitAnnexBuilder.armAutoBuilder
 		Unstable ARMEL Nothing 
-		(Cron.Times "15 6 * * *") "22h")
+		(Cron.Times "15 6 * * 2-5") "23h")
+	-- Runs only on weekends.
 	& Systemd.nspawned (GitAnnexBuilder.autoBuilderContainer
 		GitAnnexBuilder.stackAutoBuilder
 		(Stable "jessie") ARMEL (Just "ancient")
-		(Cron.Times "15 18 * * *") "22h")
+		(Cron.Times "15 6 * * 6-7") "23h")
 
 -- This is not a complete description of kite, since it's a
 -- multiuser system with eg, user passwords that are not deployed
