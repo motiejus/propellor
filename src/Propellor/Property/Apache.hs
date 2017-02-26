@@ -90,7 +90,7 @@ listenPorts :: [Port] -> Property DebianLike
 listenPorts ps = "/etc/apache2/ports.conf" `File.hasContent` map portline ps
 	`onChange` restarted
   where
-	portline port = "Listen " ++ fromPort port
+	portline port = "Listen " ++ val port
 
 -- This is a list of config files because different versions of apache
 -- use different filenames. Propellor simply writes them all.
@@ -153,8 +153,8 @@ virtualHost domain port docroot = virtualHost' domain port docroot []
 -- | Like `virtualHost` but with additional config lines added.
 virtualHost' :: Domain -> Port -> WebRoot -> [ConfigLine] -> RevertableProperty DebianLike DebianLike
 virtualHost' domain port docroot addedcfg = siteEnabled domain $
-	[ "<VirtualHost *:" ++ fromPort port ++ ">"
-	, "ServerName " ++ domain ++ ":" ++ fromPort port
+	[ "<VirtualHost *:" ++ val port ++ ">"
+	, "ServerName " ++ domain ++ ":" ++ val port
 	, "DocumentRoot " ++ docroot
 	, "ErrorLog /var/log/apache2/error.log"
 	, "LogLevel warn"
@@ -220,8 +220,8 @@ httpsVirtualHost' domain docroot letos addedcfg = setup <!> teardown
 			]
 	sslconffile s = "/etc/apache2/sites-available/ssl/" ++ domain ++ "/" ++ s ++ ".conf"
 	vhost p ls =
-		[ "<VirtualHost *:" ++ fromPort p ++">"
-		, "ServerName " ++ domain ++ ":" ++ fromPort p
+		[ "<VirtualHost *:" ++ val p ++">"
+		, "ServerName " ++ domain ++ ":" ++ val p
 		, "DocumentRoot " ++ docroot
 		, "ErrorLog /var/log/apache2/error.log"
 		, "LogLevel warn"
