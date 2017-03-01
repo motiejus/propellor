@@ -426,19 +426,6 @@ githubKeys =
 		`onChange` File.ownerGroup f (User "joey") (Group "joey")
 
 
--- these repos are only mirrored on github, I don't want
--- all the proprietary features
-githubMirrors :: [(String, String)]
-githubMirrors =
-	[ ("ikiwiki", plzuseurl "http://ikiwiki.info/todo/")
-	, ("git-annex", plzuseurl "http://git-annex.branchable.com/todo/")
-	, ("myrepos", plzuseurl "http://myrepos.branchable.com/todo/")
-	, ("propellor", plzuseurl "http://propellor.branchable.com/todo/")
-	, ("etckeeper", plzuseurl "http://etckeeper.branchable.com/todo/")
-	]
-  where
-	plzuseurl u = "Please submit changes to " ++ u ++ " instead of using github pull requests, which are not part of my workflow. Just open a todo item there and link to a git repository containing your changes. Did you know, git is a distributed system? The git repository doesn't even need to be on github! Please send any complaints to Github; they don't allow turning off pull requests or redirecting them elsewhere.  -- A robot acting on behalf of Joey Hess"
-
 rsyncNetBackup :: [Host] -> Property DebianLike
 rsyncNetBackup hosts = Cron.niceJob "rsync.net copied in daily" (Cron.Times "30 5 * * *")
 	(User "joey") "/home/joey/lib/backup" "mkdir -p rsync.net && rsync --delete -az 2318@usw-s002.rsync.net: rsync.net"
