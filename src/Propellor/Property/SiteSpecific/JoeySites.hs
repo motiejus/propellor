@@ -234,17 +234,11 @@ gitServer hosts = propertyList "git.kitenet.net setup" $ props
 	& File.hasPrivContentExposed "/etc/kgb-bot/kgb-client.conf" anyContext
 		`requires` File.dirExists "/etc/kgb-bot/"
 	& Git.daemonRunning "/srv/git"
-	& "/etc/cgitrc" `File.hasContent`
-		[ "clone-url=https://git.joeyh.name/git/$CGIT_REPO_URL git://git.joeyh.name/$CGIT_REPO_URL"
-		, "css=/cgit-css/cgit.css"
-		, "logo=/cgit-css/cgit.png"
-		, "enable-http-clone=1"
-		, "root-title=Joey's git repositories"
-		, "root-desc="
-		, "enable-index-owner=0"
-		, "snapshots=tar.gz"
-		, "enable-git-config=1"
-		, "scan-path=/srv/git"
+	& "/etc/gitweb.conf" `File.containsLines`
+		[ "$projectroot = '/srv/git';"
+		, "@git_base_url_list = ('https://git.joeyh.name/git', 'git://git.joeyh.name', 'ssh://git.joeyh.name/srv/git');"
+		, "# disable snapshot download; overloads server"
+		, "$feature{'snapshot'}{'default'} = [];"
 		]
 		`describe` "cgit configured"
 	-- I keep the website used for git.kitenet.net/git.joeyh.name checked into git..
