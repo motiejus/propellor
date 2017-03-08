@@ -72,6 +72,11 @@ propellor (4.0.0) unstable; urgency=medium
   * The doNothing property is now simply mempty. The name was retained
     because it can be clearer than mempty in some contexts.
   * Added Apache.confEnabled.
+  * Makefile: Removed "run" target which was default target.
+    "make" now only builds propellor, does not run it.
+    Note that propellor 1.0.0 and earlier relied on this target for
+    the Cron.runPropellor property's cronjob to work, so upgrading
+    directly to this version from 1.0.0 would break that cron job.
 
  -- Joey Hess <id@joeyh.name>  Wed, 15 Mar 2017 15:46:42 -0400
 
