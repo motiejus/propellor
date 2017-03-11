@@ -79,6 +79,8 @@ propellor (4.0.0) unstable; urgency=medium
     directly to this version from 1.0.0 would break that cron job.
   * Remove make from propellor's dependency list; it's not used by
     propellor any longer.
+  * Changed Chroot data type to include Info propigation.
+    (API change)
 
  -- Joey Hess <id@joeyh.name>  Wed, 15 Mar 2017 15:46:42 -0400
 
