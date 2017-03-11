@@ -63,16 +63,9 @@ type DiskImage = FilePath
 -- Example use:
 --
 -- > import Propellor.Property.DiskImage
---
--- > let chroot d = Chroot.debootstrapped mempty d $ props
--- >	& osDebian Unstable X86_64
--- >	& Apt.installed ["linux-image-amd64"]
--- >	& User.hasPassword (User "root")
--- >	& User.accountFor (User "demo")
--- > 	& User.hasPassword (User "demo")
--- >	& User.hasDesktopGroups (User "demo")
--- > 	& ...
--- > in imageBuilt "/srv/images/foo.img" chroot
+-- > 
+-- > ...
+-- > & imageBuilt "/srv/images/foo.img" mychroot
 -- >	MSDOS (grubBooted PC)
 -- >	[ partition EXT2 `mountedAt` "/boot"
 -- >		`setFlag` BootFlag
@@ -81,15 +74,17 @@ type DiskImage = FilePath
 -- >		`mountOpt` errorReadonly
 -- >	, swapPartition (MegaBytes 256)
 -- >	]
+-- > where
+-- >	mychroot d = Chroot.debootstrapped mempty d $ props
+-- >		& osDebian Unstable X86_64
+-- >		& Apt.installed ["linux-image-amd64"]
+-- >		& User.hasPassword (User "root")
+-- >		& User.accountFor (User "demo")
+-- > 		& User.hasPassword (User "demo")
+-- >		& User.hasDesktopGroups (User "demo")
+-- > 		& ...
 --
--- Note that the disk image file is reused if it already exists,
--- to avoid expensive IO to generate a new one. And, it's updated in-place,
--- so its contents are undefined during the build process.
---
--- Note that the `Chroot.noServices` property is automatically added to the
--- chroot while the disk image is being built, which should prevent any
--- daemons that are included from being started on the system that is
--- building the disk image.
+-- 
 imageBuilt :: DiskImage -> (FilePath -> Chroot) -> TableType -> Finalization -> [PartSpec] -> RevertableProperty (HasInfo + DebianLike) Linux
 imageBuilt = imageBuilt' False
 
