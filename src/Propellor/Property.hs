@@ -120,13 +120,15 @@ onChange
         -> CombinedType x y
 onChange = combineWith combiner revertcombiner
   where
-	combiner p hook = do
+	combiner (Just p) (Just hook) = Just $ do
 		r <- p
 		case r of
 			MadeChange -> do
 				r' <- hook
 				return $ r <> r'
 			_ -> return r
+	combiner (Just p) Nothing = Just p
+	combiner Nothing _ = Nothing
 	revertcombiner = (<>)
 
 -- | Same as `onChange` except that if property y fails, a flag file
@@ -144,7 +146,7 @@ onChangeFlagOnFail
         -> CombinedType x y
 onChangeFlagOnFail flagfile = combineWith combiner revertcombiner
   where
-	combiner s1 s2 = do
+	combiner (Just s1) s2 = Just $ do
 		r1 <- s1
 		case r1 of
 			MadeChange -> flagFailed s2
@@ -152,8 +154,11 @@ onChangeFlagOnFail flagfile = combineWith combiner revertcombiner
 				( flagFailed s2
 				, return r1
 				)
+	combiner Nothing _ = Nothing
+
 	revertcombiner = (<>)
-	flagFailed s = do
+
+	flagFailed (Just s) = do
 		r <- s
 		liftIO $ case r of
 			FailedChange -> createFlagFile
@@ -181,11 +186,13 @@ infixl 1 ==>
 fallback :: (Combines p1 p2) => p1 -> p2 -> CombinedType p1 p2
 fallback = combineWith combiner revertcombiner
   where
-	combiner a1 a2 = do
+	combiner (Just a1) (Just a2) = Just $ do
 		r <- a1
 		if r == FailedChange
 			then a2
 			else return r
+	combiner (Just a1) Nothing = Just a1
+	combiner Nothing _ = Nothing
 	revertcombiner = (<>)
 
 -- | Indicates that a Property may change a particular file. When the file
@@ -295,9 +302,9 @@ pickOS a b = c `addChildren` [toChildProperty a, toChildProperty b]
 	-- are added as children, so their info will propigate.
 	c = withOS (getDesc a) $ \_ o ->
 		if matching o a
-			then getSatisfy a
+			then maybe (pure NoChange) id (getSatisfy a)
 			else if matching o b
-				then getSatisfy b
+				then maybe (pure NoChange) id (getSatisfy b)
 				else unsupportedOS'
 	matching Nothing _ = False
 	matching (Just o) p =
@@ -361,7 +368,7 @@ noChange :: Propellor Result
 noChange = return NoChange
 
 doNothing :: SingI t => Property (MetaTypes t)
-doNothing = property "noop property" noChange
+doNothing = property'' "noop property" Nothing
 
 -- | Registers an action that should be run at the very end, after
 -- propellor has checks all the properties of a host.
