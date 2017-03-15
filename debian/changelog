@@ -95,6 +95,10 @@ propellor (4.0.0) unstable; urgency=medium
   * When Nothing needs to be done to ensure a property, propellor
     will avoid displaying its description at all. The doNothing property
     is an example of such a property.
+  * Added Monoid instances for Property and RevertableProperty.
+  * Removed applyToList. Instead, use mconcat. (API change)
+    Eg, if you had: applyToList accountFor [User "joey", User "root"]
+    use instead: mconcat (map accountFor [User "joey", User "root"])
 
  -- Joey Hess <id@joeyh.name>  Wed, 15 Mar 2017 15:46:42 -0400
 
