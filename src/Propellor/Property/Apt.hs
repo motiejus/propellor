@@ -20,32 +20,18 @@ import Propellor.Types.Info
 data HostMirror = HostMirror Url
 	deriving (Eq, Show, Typeable)
 
--- | Indicate host's preferred apt mirror (e.g. an apt cacher on the host's LAN)
-mirror :: Url -> Property (HasInfo + UnixLike)
-mirror u = pureInfoProperty (u ++ " apt mirror selected")
-	     (InfoVal (HostMirror u))
-
-getMirror :: Propellor Url
-getMirror = do
-	mirrorInfo <- getMirrorInfo
+getHostMirror :: Propellor Url
+getHostMirror = do
+	mirrorInfo <- getHostMirrorInfo
 	osInfo <- getOS
 	return $ case (osInfo, mirrorInfo) of
 		(_, Just (HostMirror u)) -> u
 		(Just (System (Debian _ _) _), _) ->
-			"http://deb.debian.org/debian"
-		(Just (System (Buntish _) _), _) ->
-			"mirror://mirrors.ubuntu.com/"
-		(Just (System dist _), _) ->
-			error ("no Apt mirror defined for " ++ show dist)
+		      "http://deb.debian.org/debian"
 		_ -> error "no Apt mirror defined for this host or OS"
   where
-	getMirrorInfo :: Propellor (Maybe HostMirror)
-	getMirrorInfo = fromInfoVal <$> askInfo
-
-withMirror :: Desc -> (Url -> Property DebianLike) -> Property DebianLike
-withMirror desc mkp = property' desc $ \w -> do
-	u <- getMirror
-	ensureProperty w (mkp u)
+	getHostMirrorInfo :: Propellor (Maybe HostMirror)
+	getHostMirrorInfo = fromInfoVal <$> askInfo
 
 sourcesList :: FilePath
 sourcesList = "/etc/apt/sources.list"
