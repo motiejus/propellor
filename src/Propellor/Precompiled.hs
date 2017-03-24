@@ -18,7 +18,7 @@ import System.Info (arch, os)
 -- it's not compatable.
 --
 -- Note that sending precompiled propellor binaries can use significantly
--- more bandwidth than using source code. 
+-- more bandwidth than using source code.
 --
 -- Also, using `Propellor.Property.Cron.runPropellor` on a host with a
 -- precompiled propellor won't cause changes pushed to your propellor git
@@ -70,6 +70,7 @@ systemToPrecompiledOS (System (Debian KFreeBSD _) _) = PBSD
 systemToPrecompiledOS (System (Debian Hurd _) _) = PHurd
 systemToPrecompiledOS (System (Buntish _) _) = PLinux
 systemToPrecompiledOS (System (FreeBSD _) _) = PBSD
+systemToPrecompiledOS (System ArchLinux _) = PLinux
 
 type ControllerOS = PrecompiledOS
 type HostOS = PrecompiledOS
