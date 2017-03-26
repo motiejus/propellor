@@ -1,6 +1,8 @@
 module Propellor.Precompiled (
 	precompiled,
-	isPrecompilable
+	isPrecompilable,
+	precompiledDir,
+	shouldBePrecompiled
 ) where
 
 import Propellor.Base
@@ -93,3 +95,9 @@ isPrecompilable s@(System _ harch) = case (getControllerArchitecture, getControl
 	_ -> False
   where
 	hos = systemToPrecompiledOS s
+
+precompiledDir :: FilePath
+precompiledDir = "/usr/local/propellor-precompiled"
+
+shouldBePrecompiled :: IO Bool
+shouldBePrecompiled = doesDirectoryExist precompiledDir

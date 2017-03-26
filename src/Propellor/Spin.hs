@@ -117,7 +117,8 @@ spin' mprivdata relay target hst = do
 		]
 
 	updatecmd = intercalate " && "
-		[ "cd " ++ localdir
+		[ "rm -rf " ++ precompiledDir
+		, "cd " ++ localdir
 		, bootstrapPropellorCommand sys
 		, if viarelay
 			then "./propellor --continue " ++
@@ -309,8 +310,7 @@ sendGitClone hn = void $ actionMessage ("Clone git repository to " ++ hn) $ do
   where
 	remotebundle = "/usr/local/propellor.git"
 	unpackcmd branch = shellWrap $ intercalate " && "
-		[ "rm -rf " ++ localdir
-		, "git clone " ++ remotebundle ++ " " ++ localdir
+		[ "git clone " ++ remotebundle ++ " " ++ localdir
 		, "cd " ++ localdir
 		, "git checkout -b " ++ branch
 		, "git remote rm origin"
@@ -327,7 +327,7 @@ sendPrecompiled hn = void $ actionMessage "Uploading locally compiled propellor 
   where
 	go tmpdir = do
 		cacheparams <- sshCachingParams hn
-		let shimdir = takeFileName localdir
+		let shimdir = takeFileName precompiledDir
 		createDirectoryIfMissing True (tmpdir </> shimdir)
 		changeWorkingDirectory (tmpdir </> shimdir)
 		me <- readSymbolicLink "/proc/self/exe"
@@ -338,17 +338,17 @@ sendPrecompiled hn = void $ actionMessage "Uploading locally compiled propellor 
 		let binpath = Just $ localdir </> bin
 		void $ Shim.setup bin binpath "."
 		changeWorkingDirectory tmpdir
-		withTmpFile "propellor.tar." $ \tarball _ -> allM id
+		withTmpFile "propellor-precompiled.tar." $ \tarball _ -> allM id
 			[ boolSystem "strip" [File me]
 			, boolSystem "tar" [Param "czf", File tarball, File shimdir]
 			, boolSystemNonConcurrent "scp" $ cacheparams ++ [File tarball, Param ("root@"++hn++":"++remotetarball)]
 			, boolSystemNonConcurrent "ssh" $ cacheparams ++ [Param ("root@"++hn), Param unpackcmd]
 			]
 
-	remotetarball = "/usr/local/propellor.tar"
+	remotetarball = "/usr/local/propellor-precompiled.tar"
 
 	unpackcmd = shellWrap $ intercalate " && "
-		[ "rm -rf " ++ localdir </> ".git"
+		[ "rm -rf " ++ precompiledDir
 		, "cd " ++ takeDirectory remotetarball
 		, "tar xzf " ++ remotetarball
 		, "rm -f " ++ remotetarball

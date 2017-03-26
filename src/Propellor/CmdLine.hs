@@ -14,6 +14,7 @@ import Propellor.Gpg
 import Propellor.Git
 import Propellor.Git.VerifiedBranch
 import Propellor.Bootstrap
+import Propellor.Precompiled
 import Propellor.Spin
 import Propellor.Types.CmdLine
 import qualified Propellor.Property.Docker as Docker
@@ -172,7 +173,7 @@ unknownhost h hosts = errorMessage $ unlines
 -- The Host should only be provided when dependencies should be installed
 -- as needed to build propellor.
 buildFirst :: Maybe Host -> CanRebuild -> CmdLine -> IO () -> IO ()
-buildFirst h CanRebuild cmdline next = ifM hasGitRepo
+buildFirst h CanRebuild cmdline next = ifM (not <$> shouldBePrecompiled)
 	( do
 		oldtime <- getmtime
 		buildPropellor h
@@ -197,12 +198,12 @@ continueAfterBuild cmdline = go =<< boolSystem "./propellor"
 
 fetchFirst :: IO () -> IO ()
 fetchFirst next = do
-	whenM (hasGitRepo <&&> hasOrigin) $
+	whenM ((not <$> shouldBePrecompiled) <&&> hasOrigin) $
 		void fetchOrigin
 	next
 
 updateFirst :: Maybe Host -> CanRebuild -> CmdLine -> IO () -> IO ()
-updateFirst h canrebuild cmdline next = ifM (hasGitRepo <&&> hasOrigin)
+updateFirst h canrebuild cmdline next = ifM ((not <$> shouldBePrecompiled) <&&> hasOrigin)
 	( updateFirst' h canrebuild cmdline next
 	, next
 	)
