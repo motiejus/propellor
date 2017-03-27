@@ -85,12 +85,12 @@ spin' mprivdata relay target hst = do
 		(Just Precompiled, Just True) -> do
 			sendPrecompiled target
 			updateserver cacheparams sshtarget (Just Precompiled)
-		(Just Precompiled, Just False) -> do
+		(Just Precompiled, _) -> do
 			error $ target ++ " is configured to use a precompiled propellor binary, but this host is not able to compile binaries that will work on " ++ target
-		_ -> updateserver cacheparams sshtarget Nothing
+		(Nothing, _) -> updateserver cacheparams sshtarget Nothing
 
 	-- And now we can run it.
-	unlessM (boolSystemNonConcurrent "ssh" (map Param $ cacheparams ++ ["-t", sshtarget, shellWrap runcmd])) $
+	unlessM (boolSystemNonConcurrent "ssh" (map Param $ cacheparams ++ ["-t", sshtarget, shellWrap (runcmd buildmethod)])) $
 		error "remote propellor failed"
   where
 	hn = fromMaybe target relay
@@ -135,7 +135,9 @@ spin' mprivdata relay target hst = do
 			else "./propellor --boot " ++ target
 		]
 
-	runcmd = "cd " ++ localdir ++ " && ./propellor " ++ cmd
+	runcmd (Just Precompiled) = "cd " ++ precompiledDir ++ " && ./propellor " ++ cmd
+	runcmd Nothing = "cd " ++ localdir ++ " && ./propellor " ++ cmd
+
 	cmd = "--serialized " ++ shellEscape (show cmdline)
 	cmdline
 		| viarelay = Spin [target] (Just target)
@@ -343,7 +345,7 @@ sendPrecompiled hn = void $ actionMessage "Uploading locally compiled propellor 
 		unlessM (boolSystem "cp" [File me, File "bin/propellor"]) $
 			errorMessage "failed copying in propellor"
 		let bin = "bin/propellor"
-		let binpath = Just $ localdir </> bin
+		let binpath = Just $ precompiledDir </> bin
 		void $ Shim.setup bin binpath "."
 		changeWorkingDirectory tmpdir
 		withTmpFile "propellor-precompiled.tar." $ \tarball _ -> allM id
