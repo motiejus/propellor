@@ -107,12 +107,14 @@ spin' mprivdata relay target hst = do
 	viarelay = isJust relay && not relaying
 
 	probecmd = intercalate " ; "
-		[ "if [ ! -d " ++ localdir ++ "/.git ]"
+		[ "if [ ! -d " ++ localdir ++ "/.git ] && [ ! -d ++ " ++ precompiledDir ++ " ]"
 		, "then (" ++ intercalate " && "
 			[ installGitCommand sys
 			, "echo " ++ toMarked statusMarker (show NeedGitClone)
 			] ++ ") || echo " ++ toMarked statusMarker (show NeedPrecompiled)
-		, "else " ++ updatecmd
+		, "elif [ ! -d " ++ precompiledDir ++ " ]"
+		, "then " ++ updatecmd
+		, "else " ++ updateprecompiledcmd
 		, "fi"
 		]
 
