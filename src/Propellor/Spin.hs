@@ -121,14 +121,14 @@ spin' mprivdata relay target hst = do
 	updatecmd = updatecmd'
 		[ "rm -rf " ++ precompiledDir
 		, "cd " ++ localdir
+		, bootstrapPropellorCommand sys
 		]
 
 	updateprecompiledcmd = updatecmd' [ "cd " ++ precompiledDir ]
 
 	updatecmd' cmds = intercalate " && " $
 		cmds ++
-		[ bootstrapPropellorCommand sys
-		, if viarelay
+		[ if viarelay
 			then "./propellor --continue " ++
 				shellEscape (show (Relay target))
 			-- Still using --boot for back-compat...
