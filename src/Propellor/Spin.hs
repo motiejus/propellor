@@ -87,7 +87,10 @@ spin' mprivdata relay target hst = do
 			updateserver cacheparams sshtarget (Just Precompiled)
 		(Just Precompiled, _) -> do
 			error $ target ++ " is configured to use a precompiled propellor binary, but this host is not able to compile binaries that will work on " ++ target
-		(Nothing, _) -> updateserver cacheparams sshtarget Nothing
+		(Nothing, _) -> do
+			unlessM (boolSystemNonConcurrent "ssh" (map Param $ cacheparams ++ ["-t", sshtarget, shellWrap ("rm -rf " ++ precompiledDir)])) $
+				error "propellor-precompiled cleaning failed"
+			updateserver cacheparams sshtarget Nothing
 
 	-- And now we can run it.
 	unlessM (boolSystemNonConcurrent "ssh" (map Param $ cacheparams ++ ["-t", sshtarget, shellWrap (runcmd buildmethod)])) $
