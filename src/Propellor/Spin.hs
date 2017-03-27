@@ -84,13 +84,15 @@ spin' mprivdata relay target hst = do
 	case (buildmethod, isPrecompilable <$> sys) of
 		(Just Precompiled, Just True) -> do
 			sendPrecompiled target
-			updateserver cacheparams sshtarget (Just Precompiled)
 		(Just Precompiled, _) -> do
 			error $ target ++ " is configured to use a precompiled propellor binary, but this host is not able to compile binaries that will work on " ++ target
 		(Nothing, _) -> do
 			unlessM (boolSystemNonConcurrent "ssh" (map Param $ cacheparams ++ ["-t", sshtarget, shellWrap ("rm -rf " ++ precompiledDir)])) $
 				error "propellor-precompiled cleaning failed"
-			updateserver cacheparams sshtarget Nothing
+			updateServer target relay hst
+				(proc "ssh" $ cacheparams ++ [sshtarget, shellWrap probecmd])
+				(proc "ssh" $ cacheparams ++ [sshtarget, shellWrap updatecmd])
+				=<< getprivdata
 
 	-- And now we can run it.
 	unlessM (boolSystemNonConcurrent "ssh" (map Param $ cacheparams ++ ["-t", sshtarget, shellWrap (runcmd buildmethod)])) $
@@ -110,28 +112,19 @@ spin' mprivdata relay target hst = do
 	viarelay = isJust relay && not relaying
 
 	probecmd = intercalate " ; "
-		[ "if [ ! -d " ++ localdir ++ "/.git ] && [ ! -d ++ " ++ precompiledDir ++ " ]"
+		[ "if [ ! -d " ++ localdir ++ "/.git ]"
 		, "then (" ++ intercalate " && "
 			[ installGitCommand sys
 			, "echo " ++ toMarked statusMarker (show NeedGitClone)
 			] ++ ") || echo " ++ toMarked statusMarker (show NeedPrecompiled)
-		, "elif [ ! -d " ++ precompiledDir ++ " ]"
-		, "then " ++ updatecmd
-		, "else " ++ updateprecompiledcmd
+		, "else " ++ updatecmd
 		, "fi"
 		]
 
-	updatecmd = updatecmd'
-		[ "rm -rf " ++ precompiledDir
-		, "cd " ++ localdir
+	updatecmd = intercalate " && "
+		[ "cd " ++ localdir
 		, bootstrapPropellorCommand sys
-		]
-
-	updateprecompiledcmd = updatecmd' [ "cd " ++ precompiledDir ]
-
-	updatecmd' cmds = intercalate " && " $
-		cmds ++
-		[ if viarelay
+		, if viarelay
 			then "./propellor --continue " ++
 				shellEscape (show (Relay target))
 			-- Still using --boot for back-compat...
@@ -156,13 +149,6 @@ spin' mprivdata relay target hst = do
 			| otherwise ->
 				filterPrivData hst <$> decryptPrivData
 		Just pd -> pure pd
-
-	updateserver cacheparams sshtarget (Just Precompiled) = updateserver' cacheparams sshtarget (proc "ssh" $ cacheparams ++ [sshtarget, shellWrap updateprecompiledcmd])
-	updateserver cacheparams sshtarget Nothing = updateserver' cacheparams sshtarget (proc "ssh" $ cacheparams ++ [sshtarget, shellWrap updatecmd])
-	updateserver' cacheparams sshtarget p = updateServer target relay hst
-		(proc "ssh" $ cacheparams ++ [sshtarget, shellWrap probecmd])
-		p
-		=<< getprivdata
 
 -- Check if the Host contains an IP address that matches one of the IPs
 -- in the DNS for the HostName. If so, the HostName is used as-is,
