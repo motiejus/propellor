@@ -116,10 +116,16 @@ spin' mprivdata relay target hst = do
 		, "fi"
 		]
 
-	updatecmd = intercalate " && "
+	updatecmd = updatecmd'
 		[ "rm -rf " ++ precompiledDir
 		, "cd " ++ localdir
-		, bootstrapPropellorCommand sys
+		]
+
+	updateprecompiledcmd = updatecmd' [ "cd " ++ precompiledDir ]
+
+	updatecmd' cmds = intercalate " && " $
+		cmds ++
+		[ bootstrapPropellorCommand sys
 		, if viarelay
 			then "./propellor --continue " ++
 				shellEscape (show (Relay target))
@@ -144,7 +150,7 @@ spin' mprivdata relay target hst = do
 				filterPrivData hst <$> decryptPrivData
 		Just pd -> pure pd
 
-	updateserver cacheparams sshtarget (Just Precompiled) = updateserver' cacheparams sshtarget (error "loop")
+	updateserver cacheparams sshtarget (Just Precompiled) = updateserver' cacheparams sshtarget (proc "ssh" $ cacheparams ++ [sshtarget, shellWrap updateprecompiledcmd])
 	updateserver cacheparams sshtarget Nothing = updateserver' cacheparams sshtarget (proc "ssh" $ cacheparams ++ [sshtarget, shellWrap updatecmd])
 	updateserver' cacheparams sshtarget p = updateServer target relay hst
 		(proc "ssh" $ cacheparams ++ [sshtarget, shellWrap probecmd])
