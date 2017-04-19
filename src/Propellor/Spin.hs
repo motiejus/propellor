@@ -95,7 +95,7 @@ spin' mprivdata relay target hst = do
 				=<< getprivdata
 
 	-- And now we can run it.
-	unlessM (boolSystemNonConcurrent "ssh" (map Param $ cacheparams ++ ["-t", sshtarget, shellWrap (runcmd buildmethod)])) $
+	unlessM (boolSystemNonConcurrent "ssh" (map Param $ cacheparams ++ ["-t", sshtarget, shellWrap runcmd])) $
 		error "remote propellor failed"
   where
 	hn = fromMaybe target relay
@@ -131,8 +131,7 @@ spin' mprivdata relay target hst = do
 			else "./propellor --boot " ++ target
 		]
 
-	runcmd (Just Precompiled) = "cd " ++ precompiledDir ++ " && ./propellor " ++ cmd
-	runcmd Nothing = "cd " ++ localdir ++ " && ./propellor " ++ cmd
+	runcmd = "cd " ++ localdir ++ " && ./propellor " ++ cmd
 
 	cmd = "--serialized " ++ shellEscape (show cmdline)
 	cmdline
@@ -309,11 +308,11 @@ sendGitClone hn = void $ actionMessage ("Clone git repository to " ++ hn) $ do
   where
 	remotebundle = "/usr/local/propellor.git"
 	unpackcmd branch = shellWrap $ intercalate " && "
-		[ "git clone " ++ remotebundle ++ " " ++ localdir
-		, "cd " ++ localdir
+		[ "cd " ++ remotebundle
 		, "git checkout -b " ++ branch
-		, "git remote rm origin"
-		, "rm -f " ++ remotebundle
+		, "mkdir -p " ++ localdir
+		, "(cd " ++ remotebundle ++ " && tar c) | (cd " ++ localdir ++ " && tar x)"
+		, "rm -rf " ++ remotebundle
 		]
 
 -- Send a tarball containing the precompiled propellor, and libraries.
@@ -334,7 +333,7 @@ sendPrecompiled hn = void $ actionMessage "Uploading locally compiled propellor 
 		unlessM (boolSystem "cp" [File me, File "bin/propellor"]) $
 			errorMessage "failed copying in propellor"
 		let bin = "bin/propellor"
-		let binpath = Just $ precompiledDir </> bin
+		let binpath = Just $ localdir </> bin
 		void $ Shim.setup bin binpath "."
 		changeWorkingDirectory tmpdir
 		withTmpFile "propellor-precompiled.tar." $ \tarball _ -> allM id
@@ -349,7 +348,8 @@ sendPrecompiled hn = void $ actionMessage "Uploading locally compiled propellor 
 	unpackcmd = shellWrap $ intercalate " && "
 		[ "rm -rf " ++ precompiledDir
 		, "cd " ++ takeDirectory remotetarball
-		, "tar xJf " ++ remotetarball
+		, "mkdir -p " ++ localdir
+		, "tar xJf " ++ remotetarball ++ " -C " ++ localdir
 		, "rm -f " ++ remotetarball
 		]
 
