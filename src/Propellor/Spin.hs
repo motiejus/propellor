@@ -82,17 +82,14 @@ spin' mprivdata relay target hst = do
 
 	-- Install, or update the remote propellor.
 	case (buildmethod, isPrecompilable <$> sys) of
-		(Just Precompiled, Just True) -> do
-			sendPrecompiled target
-		(Just Precompiled, _) -> do
-			error $ target ++ " is configured to use a precompiled propellor binary, but this host is not able to compile binaries that will work on " ++ target
-		(Nothing, _) -> do
-			unlessM (boolSystemNonConcurrent "ssh" (map Param $ cacheparams ++ ["-t", sshtarget, shellWrap ("rm -rf " ++ precompiledDir)])) $
-				error "propellor-precompiled cleaning failed"
-			updateServer target relay hst
-				(proc "ssh" $ cacheparams ++ [sshtarget, shellWrap probecmd])
-				(proc "ssh" $ cacheparams ++ [sshtarget, shellWrap updatecmd])
-				=<< getprivdata
+		(Just Precompiled, Just True) -> sendPrecompiled target
+		(Just Precompiled, _) -> error $ target ++ " is configured to use a precompiled propellor binary, but this host is not able to compile binaries that will work on " ++ target
+		(Nothing, _) -> updateServer
+			target
+			relay
+			hst
+			(proc "ssh" $ cacheparams ++ [sshtarget, shellWrap probecmd])
+			=<< getprivdata
 
 	-- And now we can run it.
 	unlessM (boolSystemNonConcurrent "ssh" (map Param $ cacheparams ++ ["-t", sshtarget, shellWrap runcmd])) $
@@ -112,7 +109,8 @@ spin' mprivdata relay target hst = do
 	viarelay = isJust relay && not relaying
 
 	probecmd = intercalate " ; "
-		[ "if [ ! -d " ++ localdir ++ "/.git ]"
+		[ "rm -rf " ++ precompiledDir
+		, "if [ ! -d " ++ localdir ++ "/.git ]"
 		, "then (" ++ intercalate " && "
 			[ installGitCommand sys
 			, "echo " ++ toMarked statusMarker (show NeedGitClone)
@@ -230,10 +228,9 @@ updateServer
 	-> Maybe HostName
 	-> Host
 	-> CreateProcess
-	-> CreateProcess
 	-> PrivMap
 	-> IO ()
-updateServer target relay hst connect haveprecompiled privdata = do
+updateServer target relay hst connect privdata = do
 	(Just toh, Just fromh, _, pid) <- createProcessNonConcurrent $ connect
 		{ std_in = CreatePipe
 		, std_out = CreatePipe
@@ -245,7 +242,7 @@ updateServer target relay hst connect haveprecompiled privdata = do
 
 	go (toh, fromh) = do
 		let loop = go (toh, fromh)
-		let restart = updateServer hn relay hst connect haveprecompiled privdata
+		let restart = updateServer hn relay hst connect privdata
 		let done = return ()
 		v <- maybe Nothing readish <$> getMarked fromh statusMarker
 		case v of
@@ -264,7 +261,7 @@ updateServer target relay hst connect haveprecompiled privdata = do
 				hClose toh
 				hClose fromh
 				sendPrecompiled hn
-				updateServer hn relay hst haveprecompiled (error "loop") privdata
+				updateServer hn relay hst (error "loop") privdata
 			(Just NeedGitPush) -> do
 				sendGitUpdate hn fromh toh
 				hClose fromh
