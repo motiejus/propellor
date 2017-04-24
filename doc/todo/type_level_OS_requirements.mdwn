@@ -5,9 +5,9 @@ Using `withOS` means throwing a runtime error on an unsupported OS. Yuck.
 Could the OS of a property be lifted to the type level?
 
 If we had `Property i '[OS]` then combining properties would need to update
-the type-level OS list.
+the type-level OS list. 
 
-For example, `Property i '[Debian, FreeBSD]` combined with `Property i '[Debian, Buntish]`
+For example, `Property i '[Debian, FreeBSD]` combined with `Property i '[Debian, Buntish]` 
 yields a `Property i '[Debian]` -- the intersection of the OS's supported by
 the combined properties.
 
@@ -30,10 +30,10 @@ contains more than one element in its '[OS], that could be a type error,
 the OS of the Host is indeterminite. Which would be fixed by using the `os`
 property to specify.
 
-On the other hand, if a Host's list of properties yields a single OS
+On the other hand, if a Host's list of properties yields a single OS 
 the type needs to be just `Host`.
 After all, propellor operates on a `[Host]`; if we had `Host OS`,
-the list couldn't contain host's with different OS's.
+the list couldn't contain host's with different OS's. 
 
 One way to do this would be to make a Host not contain a Property, but a
 Propellor Result. The list of Properties could be combined together, and

@@ -202,7 +202,6 @@ update = combineProperties ("apt update") $ props
 	& pendingConfigured
 	& runApt ["update"]
 		`assume` MadeChange
-	]
 
 -- | Have apt upgrade packages, adding new packages and removing old as
 -- necessary. Often used in combination with the `update` property.

@@ -47,7 +47,7 @@ disthead = distdir </> "head"
 upstreambranch :: String
 upstreambranch = "upstream/master"
 
--- Using the github mirror of the main propellor repo because
+-- Using the joeyh.name mirror of the main propellor repo because
 -- it is accessible over https for better security.
 netrepo :: String
 netrepo = "https://git.joeyh.name/git/propellor.git"

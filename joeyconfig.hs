@@ -82,6 +82,7 @@ testvm = host "testvm.kitenet.net" $ props
 
 darkstar :: Host
 darkstar = host "darkstar.kitenet.net" $ props
+	& osDebian Unstable X86_64
 	& ipv6 "2001:4830:1600:187::2"
 	& Aiccu.hasConfig "T18376" "JHZ2-SIXXS"
 
@@ -94,7 +95,7 @@ darkstar = host "darkstar.kitenet.net" $ props
 		[ (SshRsa, "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC1YoyHxZwG5Eg0yiMTJLSWJ/+dMM6zZkZiR4JJ0iUfP+tT2bm/lxYompbSqBeiCq+PYcSC67mALxp1vfmdOV//LWlbXfotpxtyxbdTcQbHhdz4num9rJQz1tjsOsxTEheX5jKirFNC5OiKhqwIuNydKWDS9qHGqsKcZQ8p+n1g9Lr3nJVGY7eRRXzw/HopTpwmGmAmb9IXY6DC2k91KReRZAlOrk0287LaK3eCe1z0bu7LYzqqS+w99iXZ/Qs0m9OqAPnHZjWQQ0fN4xn5JQpZSJ7sqO38TBAimM+IHPmy2FTNVVn9zGM+vN1O2xr3l796QmaUG1+XLL0shfR/OZbb joey@darkstar")
 		]
 
-	! imageBuilt "/tmp/img" c MSDOS (grubBooted PC)
+	& imageBuilt "/srv/propellor-disk.img" c MSDOS (grubBooted PC)
 		[ partition EXT2 `mountedAt` "/boot"
 			`setFlag` BootFlag
 		, partition EXT4 `mountedAt` "/"
@@ -107,6 +108,7 @@ darkstar = host "darkstar.kitenet.net" $ props
 		& Hostname.setTo "demo"
 		& Apt.installed ["linux-image-amd64"]
 		& User "root" `User.hasInsecurePassword` "root"
+		& bootstrappedFrom GitRepoOutsideChroot
 
 gnu :: Host
 gnu = host "gnu.kitenet.net" $ props
@@ -127,17 +129,11 @@ clam = host "clam.kitenet.net" $ props
 	& Apt.unattendedUpgrades
 	& Network.ipv6to4
 	& Systemd.persistentJournal
-	& Journald.systemMaxUse "500MiB"
+	& Journald.systemMaxUse "50MiB"
 
 	& Tor.isRelay
 	& Tor.named "kite1"
 	& Tor.bandwidthRate (Tor.PerMonth "400 GB")
-
-	& Systemd.nspawned webserver
-	& File.dirExists "/var/www/html"
-	& File.notPresent "/var/www/index.html"
-	& "/var/www/html/index.html" `File.hasContent` ["hello, world"]
-	& alias "helloworld.kitenet.net"
 
 	& Systemd.nspawned oldusenetShellBox
 
@@ -175,6 +171,7 @@ oyster = host "oyster.kitenet.net" $ props
 	& Network.ipv6to4
 	& Systemd.persistentJournal
 	& Journald.systemMaxUse "500MiB"
+	& Apt.serviceInstalledRunning "swapspace"
 
 	& Tor.isRelay
 	& Tor.named "kite4"
@@ -541,13 +538,6 @@ keysafe = host "keysafe.joeyh.name" $ props
 --------------------------- \____, o          ,' ----------------------------
 ---------------------------- '--,___________,'  -----------------------------
 
--- Simple web server, publishing the outside host's /var/www
-webserver :: Systemd.Container
-webserver = Systemd.debContainer "webserver" $ props
-	& standardContainer (Stable "jessie")
-	& Systemd.bind "/var/www"
-	& Apache.installed
-
 -- My own openid provider. Uses php, so containerized for security
 -- and administrative sanity.
 openidProvider :: Systemd.Container
@@ -660,14 +650,10 @@ monsters =            -- but do want to track their public keys etc.
 		& Ssh.hostPubKey SshEcdsa "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBFSMqzJeV9rUzU4kWitGjeR4PWSa29SPqJ1fVkhtj3Hw9xjLVXVYrU9QlYWrOLXBpQ6KWjbjTDTdDkoohFzgbEY="
 	, host "ns6.gandi.net" $ props
 		& ipv4 "217.70.177.40"
-	, host "turtle.kitenet.net" $ props
-		& ipv4 "67.223.19.96"
-		& ipv6 "2001:4978:f:2d9::2"
 	, host "mouse.kitenet.net" $ props
 		& ipv6 "2001:4830:1600:492::2"
 		& ipv4 "67.223.19.96"
 	, host "animx" $ props
-		& ipv4 "76.7.162.101"
 		& ipv4 "76.7.162.186"
 		& ipv4 "76.7.162.187"
 	]
