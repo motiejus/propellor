@@ -303,13 +303,16 @@ sendGitClone hn = void $ actionMessage ("Clone git repository to " ++ hn) $ do
 		, boolSystemNonConcurrent "ssh" $ cacheparams ++ [Param ("root@"++hn), Param $ unpackcmd branch]
 		]
   where
-	remotebundle = "/usr/local/propellor.git"
+	remotebundle = "/usr/local/propellor.bundle.git"
+	remotebundledir = "/usr/local/propellor.git"
 	unpackcmd branch = shellWrap $ intercalate " && "
-		[ "cd " ++ remotebundle
-		, "git checkout -b " ++ branch
+		[ "git clone " ++ remotebundle ++ " " ++ remotebundledir
 		, "mkdir -p " ++ localdir
-		, "(cd " ++ remotebundle ++ " && tar c) | (cd " ++ localdir ++ " && tar x)"
-		, "rm -rf " ++ remotebundle
+		, "(cd " ++ remotebundledir ++ " && tar c .) | (cd " ++ localdir ++ " && tar x)"
+		, "cd " ++ localdir
+		, "git checkout -b " ++ branch
+		, "git remote rm origin"
+		, "rm -rf " ++ remotebundle ++ " " ++ remotebundledir
 		]
 
 -- Send a tarball containing the precompiled propellor, and libraries.
