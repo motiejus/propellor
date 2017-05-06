@@ -2,10 +2,6 @@ propellor (4.0.4) UNRELEASED; urgency=medium
 
   * Propellor.Property.Restic added for yet another backup program.
     Thanks, Félix Sipma.
-  * Bootstrap apt-get installs run with deconf noninteractive frontend.
-  * spin --via: Avoid committing on relay host.
-  * Postfix: Add service property to enable/disable services in master.cf.
-  * Added Munin module, contributed by Jelmer Vernooij.
 
  -- Joey Hess <id@joeyh.name>  Thu, 27 Apr 2017 16:31:26 -0400
 
@@ -21,7 +17,7 @@ propellor (4.0.3) unstable; urgency=medium
 propellor (4.0.2) unstable; urgency=medium
 
   * Apt.mirror can be used to set the preferred apt mirror of a host,
-    overriding the default CDN. This info is used by
+    overriding the default CDN. This info is used by 
     Apt.stdSourcesList and Sbuild.builtFor.
     Thanks, Sean Whitton.
   * Property.Partition: Update kpartx output parser, as its output format
@@ -72,33 +68,6 @@ propellor (4.0.0) unstable; urgency=medium
   * The doNothing property is now simply mempty. The name was retained
     because it can be clearer than mempty in some contexts.
   * Added Apache.confEnabled.
-  * Makefile: Removed "run" target which was default target.
-    "make" now only builds propellor, does not run it.
-    Note that propellor 1.0.0 and earlier relied on this target for
-    the Cron.runPropellor property's cronjob to work, so upgrading
-    directly to this version from 1.0.0 would break that cron job.
-  * Remove make from propellor's dependency list; it's not used by
-    propellor any longer.
-  * Changed Chroot data type to include Info propigation.
-    (API change)
-  * Implemented hostChroot, as originally seen in my slides at
-    Linux.Conf.Au 2017 in January. Now that it's not vaporware, it allows
-    one Host to build a disk image that has all the properties of another
-    Host.
-  * DiskImage building properties used to propagate DNS info out from
-    the chroot used to build the disk image to the Host. That is no longer
-    done, since that chroot only exists as a side effect of the disk image
-    creation and servers will not be running in it.
-  * The IsInfo types class's propagateInfo function changed to use a
-    PropagateInfo data type. (API change)
-  * Property types changed to use a Maybe (Propellor Result). (API change)
-  * When Nothing needs to be done to ensure a property, propellor
-    will avoid displaying its description at all. The doNothing property
-    is an example of such a property.
-  * Added Monoid instances for Property and RevertableProperty.
-  * Removed applyToList. Instead, use mconcat. (API change)
-    Eg, if you had: applyToList accountFor [User "joey", User "root"]
-    use instead: mconcat (map accountFor [User "joey", User "root"])
 
  -- Joey Hess <id@joeyh.name>  Wed, 15 Mar 2017 15:46:42 -0400
 
@@ -190,7 +159,6 @@ propellor (3.2.1) unstable; urgency=medium
   * Simplify Debootstrap.sourceInstall since #770217 was fixed.
   * Debootstap.installed: Fix inverted logic that made this never install
     debootstrap. Thanks, mithrandi.
-  * Added Linode.serialGrub property.
 
  -- Joey Hess <id@joeyh.name>  Mon, 03 Oct 2016 18:06:31 -0400
 
@@ -217,12 +185,29 @@ propellor (3.2.0) unstable; urgency=medium
 
 propellor (3.1.2) unstable; urgency=medium
 
-  * Tor.hiddenService: Converted port parameter from Int to Port. (API change)
-  * Tor.hiddenServiceAvailable: The hidden service hostname file may not
-    be available immedaitely after configuring tor; avoid ugly error in
-    this case.
+  [ Joey Hess ]
+  * Ssh.knownHost: Bug fix: Only fix up the owner of the known_hosts
+    file after it exists.
 
- -- Joey Hess <id@joeyh.name>  Thu, 01 Sep 2016 10:30:17 -0400
+  [ Sean Whitton ]
+  * Sbuild.keypairInsecurelyGenerated: Improved to be more robust.
+  * Pass --allow-unrelated-histories to git merge when run with git 2.9 or
+    newer. This fixes the /usr/bin/propellor wrapper with this version of git.
+  * Sbuild.built & Sbuild.builtFor no longer require Sbuild.keypairGenerated.
+    Transition guide: If you are using sbuild 0.70.0 or newer, you should
+    `rm -r /var/lib/sbuild/apt-keys`.  Otherwise, you should add either
+    Sbuild.keypairGenerated or Sbuild.keypairInsecurelyGenerated to your host.
+  * Sbuild haddock improvements:
+    - State that we don't support squeeze and Buntish older than trusty.
+      This is due to our enhancements, such as eatmydata.
+    - State that you need sbuild 0.70.0 or newer to build for stretch.
+      This is due to gpg2 hitting Debian stretch.
+    - Explain when a keygen is required.
+    - Update sample ~/.sbuildrc for sbuild 0.71.0.
+    - Add hint for customising chroots with propellor.
+    - Update example usage of System type.
+
+ -- Joey Hess <id@joeyh.name>  Sun, 28 Aug 2016 14:39:23 -0400
 
 propellor (3.1.1) unstable; urgency=medium
 
@@ -281,22 +266,7 @@ propellor (3.1.0) unstable; urgency=medium
     previous version of propellor added, though.
   * Sbuild.keypairGenerated works around Debian bug #792100 by creating the
     directory /root/.gnupg in advance.
-  * Ccache.hasCache now sets the setgid bit on the cache directory, as
-    ccache requires.
-
-  [ Sean Whitton ]
-  * New info property Schroot.useOverlays to indicate whether you want schroots
-    set up by propellor to use the Linux kernel's OverlayFS.
-  * Schroot.overlaysInTmpfs sets Schroot.useOverlays info property.
-  * If you have indicated that you want schroots to use OverlayFS and the
-    current kernel does not support it, Sbuild.built will attempt to reboot
-    into a kernel that does, or fail if it can't find one.
-  * Sbuild.built will no longer add duplicate `aliases=UNRELEASED,sid...` lines
-    to more than one schroot config. It will not remove any such lines that the
-    previous version of propellor added, though.
-  * Sbuild.keypairGenerated works around Debian bug #792100 by creating the
-    directory /root/.gnupg in advance.
-  * Ccache.hasCache now sets the setgid bit on the cache directory, as
+  * Ccache.hasCache now sets the setgid bit on the cache directory, as 
     ccache requires.
 
  -- Joey Hess <id@joeyh.name>  Wed, 22 Jun 2016 15:29:27 -0400
@@ -399,7 +369,7 @@ propellor (3.0.0) unstable; urgency=medium
  		go = property "foo" (return NoChange)
       To fix, specify the type of go:
  	  	go :: Property UnixLike
-    - `ensureProperty` now needs to be passed a witness to the type of the
+    - `ensureProperty` now needs to be passed a witness to the type of the 
       property it's used in.
       change this:  foo = property desc $ ... ensureProperty bar
       to this:      foo = property' desc $ \w -> ... ensureProperty w bar
@@ -435,7 +405,7 @@ propellor (3.0.0) unstable; urgency=medium
 propellor (2.17.2) unstable; urgency=medium
 
   * When new dependencies are added to propellor or the propellor config,
-    try harder to get them installed. In particular, this makes
+    try harder to get them installed. In particular, this makes 
     propellor --spin work when the remote host needs to get dependencies
     installed in order to build the updated config.
   * Apt.update: Also run dpkg --configure -a here as apt for some reason
@@ -448,7 +418,7 @@ propellor (2.17.1) unstable; urgency=medium
   * Avoid generating excessively long paths to the unix socket file
     used for ssh connection caching. Mostly. Can still generate a too long
     one if $HOME is longer than 60 bytes.
-  * Uwsgi: add ".ini" extension to app config files.
+  * Uwsgi: add ".ini" extension to app config files. 
     Files without extensions were ignored by uwsgi.
     Thanks, Félix Sipma.
 
@@ -557,9 +527,6 @@ propellor (2.15.1) unstable; urgency=medium
     Thanks, Félix Sipma.
   * Clean build with ghc 7.10.
   * Merged Utility changes from git-annex.
-  * Gpg.keyImported converted to not use a flag file and instead check
-    if gpg has the provided key already.
-    Thanks, Félix Sipma.
 
  -- Joey Hess <id@joeyh.name>  Sat, 19 Dec 2015 16:43:09 -0400
 
@@ -647,8 +614,6 @@ propellor (2.12.0) unstable; urgency=medium
   * The DiskImage module can now make bootable images using grub.
   * Add a ChrootTarball chroot type, for using pre-built tarballs
     as chroots. Thanks, Ben Boeckel.
-  * Added Mount.fstabbed property to generate /etc/fstab to replicate
-    current mounts.
   * HostName: Improve domain extraction code.
   * Added Mount.fstabbed property to generate /etc/fstab to replicate
     current mounts.
@@ -709,7 +674,7 @@ propellor (2.9.0) unstable; urgency=medium
     keys, the new Ssh.userKeys and Ssh.userKeyAt properties will
     always update out of date key files.
   * Ssh.pubKey renamed to Ssh.hostPubKey. (API change)
-  * Added --unset-unused
+  * Added --unset-unused 
   * Fix typo: propigate → propagate. Thanks, Felix Gruber.
     (A minor API change)
   * Chroot: Converted to use a ChrootBootstrapper type class, so
@@ -904,7 +869,7 @@ propellor (2.2.0) unstable; urgency=medium
 
   * When running shimmed (eg in a docker container),
     improve process name visible in ps.
-  * Add shebang to cron.daily etc files.
+  * Add shebang to cron.daily etc files. 
   * Some changes to tor configuration, minor API change.
   * Propellor now builds itself, and gets its build dependencies installed
     when deploying to a new host, without needing the Makefile.
@@ -913,7 +878,7 @@ propellor (2.2.0) unstable; urgency=medium
 
 propellor (2.1.0) unstable; urgency=medium
 
-  * Additional tor properties, including support for making relays,
+  * Additional tor properties, including support for making relays, 
     and naming bridges, relays, etc.
   * New Cron.Times data type, which allows Cron.job to install
     daily/monthly/weekly jobs that anacron can run. (API change)
@@ -998,7 +963,7 @@ propellor (1.2.2) unstable; urgency=medium
 
 propellor (1.2.1) unstable; urgency=medium
 
-  * Added CryptPassword to PrivDataField, for password hashes as produced
+  * Added CryptPassword to PrivDataField, for password hashes as produced 
     by crypt(3).
   * User.hasPassword and User.hasSomePassword will now use either
     a CryptPassword or a Password from privdata, depending on which is set.
@@ -1028,7 +993,7 @@ propellor (1.1.0) unstable; urgency=medium
     commit.
   * Hostname parameters not containing dots are looked up in the DNS to
     find the full hostname.
-  * propellor --spin can now deploy propellor to hosts that do not have
+  * propellor --spin can now deploy propellor to hosts that do not have 
     git, ghc, or apt-get. This is accomplished by uploading a fairly
     portable precompiled tarball of propellor.
   * Propellor.Property.OS contains properties that can be used to do a clean
@@ -1095,7 +1060,7 @@ propellor (0.9.2) unstable; urgency=medium
 propellor (0.9.1) unstable; urgency=medium
 
   * Docker: Add ability to control when containers restart.
-  * Docker: Default to always restarting containers, so they come back
+  * Docker: Default to always restarting containers, so they come back 
     up after reboots and docker daemon upgrades. (API change)
   * Fix loop when a docker host that does not exist was docked.
 
