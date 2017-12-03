@@ -32,6 +32,7 @@ module Propellor.Property (
 	, makeChange
 	, noChange
 	, doNothing
+	, impossible
 	, endAction
 	-- * Property result checking
 	, UncheckedProperty
@@ -50,8 +51,9 @@ import Data.Monoid
 import Control.Monad.IfElse
 import "mtl" Control.Monad.RWS.Strict
 import System.Posix.Files
-import qualified Data.Hash.MD5 as MD5
+import Data.Maybe
 import Data.List
+import Data.Hashable
 import Control.Applicative
 import Prelude
 
@@ -61,11 +63,12 @@ import Propellor.Types.ResultCheck
 import Propellor.Types.MetaTypes
 import Propellor.Types.Singletons
 import Propellor.Info
+import Propellor.Message
 import Propellor.EnsureProperty
 import Utility.Exception
 import Utility.Monad
-import Utility.Misc
 import Utility.Directory
+import Utility.Misc
 
 -- | Makes a perhaps non-idempotent Property be idempotent by using a flag
 -- file to indicate whether it has run before.
@@ -228,12 +231,12 @@ changesFile p f = checkResult getstat comparestat p
 -- Changes to mtime etc that do not change file content are treated as
 -- NoChange.
 changesFileContent :: Checkable p i => p i -> FilePath -> Property i
-changesFileContent p f = checkResult getmd5 comparemd5 p
+changesFileContent p f = checkResult gethash comparehash p
   where
-	getmd5 = catchMaybeIO $ MD5.md5 . MD5.Str <$> readFileStrict f
-	comparemd5 oldmd5 = do
-		newmd5 <- getmd5
-		return $ if oldmd5 == newmd5 then NoChange else MadeChange
+	gethash = catchMaybeIO $ hash <$> readFileStrict f
+	comparehash oldhash = do
+		newhash <- gethash
+		return $ if oldhash == newhash then NoChange else MadeChange
 
 -- | Determines if the first file is newer than the second file.
 --
@@ -362,6 +365,12 @@ noChange = return NoChange
 -- This is the same as `mempty` from the `Monoid` instance.
 doNothing :: SingI t => Property (MetaTypes t)
 doNothing = mempty
+
+-- | In situations where it's not possible to provide a property that
+-- works, this can be used to make a property that always fails with an
+-- error message you provide.
+impossible :: SingI t => String -> Property (MetaTypes t)
+impossible msg = property "impossible" $ errorMessage msg
 
 -- | Registers an action that should be run at the very end, after
 -- propellor has checks all the properties of a host.

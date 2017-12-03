@@ -1,11 +1,41 @@
-module Propellor.Property.Bootstrap (RepoSource(..), bootstrappedFrom, clonedFrom) where
+-- | This module contains properties that configure how Propellor
+-- bootstraps to run itself on a Host.
+
+module Propellor.Property.Bootstrap (
+	Bootstrapper(..),
+	Builder(..),
+	bootstrapWith,
+	RepoSource(..),
+	bootstrappedFrom,
+	clonedFrom
+) where
 
 import Propellor.Base
 import Propellor.Bootstrap
+import Propellor.Types.Info
 import Propellor.Property.Chroot
+import Propellor.PrivData.Paths
+import Utility.FileMode
 
 import Data.List
 import qualified Data.ByteString as B
+
+-- | This property can be used to configure the `Bootstrapper` that is used
+-- to bootstrap propellor on a Host. For example, if you want to use
+-- stack:
+--
+-- > host "example.com" $ props
+-- > 	& bootstrapWith (Robustly Stack)
+--
+-- When `bootstrappedFrom` is used in a `Chroot` or other `Container`, 
+-- this property can also be added to the chroot to configure it.
+bootstrapWith :: Bootstrapper -> Property (HasInfo + UnixLike)
+bootstrapWith b = pureInfoProperty desc (InfoVal b)
+  where
+	desc = "propellor bootstrapped with " ++ case b of
+		Robustly Stack -> "stack"
+		Robustly Cabal -> "cabal"
+		OSOnly -> "OS packages only"
 
 -- | Where a propellor repository should be bootstrapped from.
 data RepoSource
@@ -17,28 +47,43 @@ data RepoSource
 -- | Bootstraps a propellor installation into
 -- /usr/local/propellor/
 --
--- Normally, propellor is already bootstrapped when it runs, so this
--- property is not useful. However, this can be useful inside a
--- chroot used to build a disk image, to make the disk image
--- have propellor installed.
+-- Normally, propellor is bootstrapped by eg, using propellor --spin,
+-- and so this property is not generally needed.
+--
+-- This property only does anything when used inside a Chroot or other
+-- Container. This is particularly useful inside a chroot used to build a
+-- disk image, to make the disk image have propellor installed.
 --
 -- The git repository is cloned (or pulled to update if it already exists).
 --
 -- All build dependencies are installed, using distribution packages
--- or falling back to using cabal.
+-- or falling back to using cabal or stack.
 bootstrappedFrom :: RepoSource -> Property Linux
-bootstrappedFrom reposource = go `requires` clonedFrom reposource
+bootstrappedFrom reposource = check inChroot $
+	go `requires` clonedFrom reposource
   where
 	go :: Property Linux
 	go = property "Propellor bootstrapped" $ do
 		system <- getOS
-		assumeChange $ exposeTrueLocaldir $ const $ 
+		-- gets Host value representing the chroot this is run in
+		chroothost <- ask
+		-- load privdata from outside the chroot, and filter
+		-- to only the privdata needed inside the chroot.
+		privdata <- liftIO $ filterPrivData chroothost
+			<$> readPrivDataFile privDataLocal
+		bootstrapper <- getBootstrapper
+		assumeChange $ exposeTrueLocaldir $ const $ do
+			liftIO $ createDirectoryIfMissing True $
+				takeDirectory privDataLocal
+			liftIO $ writeFileProtected privDataLocal $
+				show privdata
 			runShellCommand $ buildShellCommand
 				[ "cd " ++ localdir
-				, bootstrapPropellorCommand system
+				, checkDepsCommand bootstrapper system
+				, buildCommand bootstrapper
 				]
 
--- | Clones the propellor repeository into /usr/local/propellor/
+-- | Clones the propellor repository into /usr/local/propellor/
 --
 -- If the propellor repo has already been cloned, pulls to get it
 -- up-to-date.
@@ -83,7 +128,7 @@ clonedFrom reposource = case reposource of
 	-- configuration.
 	copygitconfig :: Property Linux
 	copygitconfig = property ("Propellor repo git config copied from outside the chroot") $ do
-		let gitconfig = localdir <> ".git" <> "config"
+		let gitconfig = localdir </> ".git" </> "config"
 		cfg <- liftIO $ B.readFile gitconfig
 		exposeTrueLocaldir $ const $
 			liftIO $ B.writeFile gitconfig cfg

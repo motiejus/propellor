@@ -30,6 +30,7 @@ import Propellor.Gpg
 import Propellor.Bootstrap
 import Propellor.Types.CmdLine
 import Propellor.Types.Info
+import Propellor.Property.PropellorRepo (OriginUrl(..))
 import qualified Propellor.Shim as Shim
 import Utility.FileMode
 import Utility.SafeCommand
@@ -99,6 +100,9 @@ spin' mprivdata relay target hst = do
 	sys = case fromInfo (hostInfo hst) of
 		InfoVal o -> Just o
 		NoInfoVal -> Nothing
+	bootstrapper = case fromInfo (hostInfo hst) of
+		NoInfoVal -> defaultBootstrapper
+		InfoVal bs -> bs
 
 	buildmethod :: Maybe Build
 	buildmethod = case fromInfo (hostInfo hst) of
@@ -121,7 +125,7 @@ spin' mprivdata relay target hst = do
 
 	updatecmd = intercalate " && "
 		[ "cd " ++ localdir
-		, bootstrapPropellorCommand sys
+		, bootstrapPropellorCommand bootstrapper sys
 		, if viarelay
 			then "./propellor --continue " ++
 				shellEscape (show (Relay target))
@@ -183,7 +187,7 @@ getSshTarget target hst
 					return ip
 
 	configips = map val $ mapMaybe getIPAddr $
-		S.toList $ fromDnsInfo $ fromInfo $ hostInfo hst
+		S.toList $ getDnsInfo $ hostInfo hst
 
 -- Update the privdata, repo url, and git repo over the ssh
 -- connection, talking to the user's local propellor instance which is
@@ -199,26 +203,8 @@ update forhost = do
 		writeFileProtected privfile
 
 	whenM hasGitRepo $
-		req NeedGitPush gitPushMarker $ \_ -> do
-			hin <- dup stdInput
-			hout <- dup stdOutput
-			hClose stdin
-			hClose stdout
-			-- Not using git pull because git 2.5.0 badly
-			-- broke its option parser.
-			unlessM (boolSystemNonConcurrent "git" (pullparams hin hout)) $
-				errorMessage "git fetch from client failed"
-			unlessM (boolSystemNonConcurrent "git" [Param "merge", Param "FETCH_HEAD"]) $
-				errorMessage "git merge from client failed"
+		gitPullFromUpdateServer
   where
-	pullparams hin hout =
-		[ Param "fetch"
-		, Param "--progress"
-		, Param "--upload-pack"
-		, Param $ "./propellor --gitpush " ++ show hin ++ " " ++ show hout
-		, Param "."
-		]
-
 	-- When --spin --relay is run, get a privdata file
 	-- to be relayed to the target host.
 	privfile = maybe privDataLocal privDataRelay forhost
@@ -247,7 +233,7 @@ updateServer target relay hst connect privdata = do
 		v <- maybe Nothing readish <$> getMarked fromh statusMarker
 		case v of
 			(Just NeedRepoUrl) -> do
-				sendRepoUrl toh
+				sendRepoUrl hst toh
 				loop
 			(Just NeedPrivData) -> do
 				sendPrivData hn toh privdata
@@ -269,8 +255,12 @@ updateServer target relay hst connect privdata = do
 				done
 			Nothing -> done
 
-sendRepoUrl :: Handle -> IO ()
-sendRepoUrl toh = sendMarked toh repoUrlMarker =<< (fromMaybe "" <$> getRepoUrl)
+sendRepoUrl :: Host -> Handle -> IO ()
+sendRepoUrl hst toh = sendMarked toh repoUrlMarker =<< geturl
+  where
+	geturl = case fromInfoVal (fromInfo (hostInfo hst)) of
+		Nothing -> fromMaybe "" <$> getRepoUrl
+		Just (OriginUrl u) -> return u
 
 sendPrivData :: HostName -> Handle -> PrivMap -> IO ()
 sendPrivData hn toh privdata = void $ actionMessage msg $ do
@@ -353,31 +343,6 @@ sendPrecompiled hn = void $ actionMessage "Uploading locally compiled propellor 
 		, "rm -f " ++ remotetarball
 		]
 
--- Shim for git push over the propellor ssh channel.
--- Reads from stdin and sends it to hout;
--- reads from hin and sends it to stdout.
-gitPushHelper :: Fd -> Fd -> IO ()
-gitPushHelper hin hout = void $ fromstdin `concurrently` tostdout
-  where
-	fromstdin = do
-		h <- fdToHandle hout
-		connect stdin h
-	tostdout = do
-		h <- fdToHandle hin
-		connect h stdout
-	connect fromh toh = do
-		hSetBinaryMode fromh True
-		hSetBinaryMode toh True
-		b <- B.hGetSome fromh 40960
-		if B.null b
-			then do
-				hClose fromh
-				hClose toh
-			else do
-				B.hPut toh b
-				hFlush toh
-				connect fromh toh
-
 mergeSpin :: IO ()
 mergeSpin = do
 	branch <- getCurrentBranch
@@ -405,3 +370,68 @@ findLastNonSpinCommit = do
 
 spinCommitMessage :: String
 spinCommitMessage = "propellor spin"
+
+-- Stdin and stdout are connected to the updateServer over ssh.
+-- Request that it run git upload-pack, and connect that up to a git fetch
+-- to receive the data.
+gitPullFromUpdateServer :: IO ()
+gitPullFromUpdateServer = req NeedGitPush gitPushMarker $ \_ -> do
+	-- IO involving stdin can cause data to be buffered in the Handle
+	-- (even when it's set NoBuffering), but we need to pass a FD to 
+	-- git fetch containing all of stdin after the gitPushMarker,
+	-- including any that has been buffered.
+	--
+	-- To do so, create a pipe, and forward stdin, including any
+	-- buffered part, through it.
+	(pread, pwrite) <- System.Posix.IO.createPipe
+	-- Note that there is a race between the createPipe and setting
+	-- CloseOnExec. Another processess forked here would inherit
+	-- pwrite and perhaps keep it open. However, propellor is not
+	-- running concurrent threads at this point, so this is ok.
+	setFdOption pwrite CloseOnExec True
+	hwrite <- fdToHandle pwrite
+	forwarder <- async $ stdin *>* hwrite
+	let hin = pread
+	hout <- dup stdOutput
+	hClose stdout
+	-- Not using git pull because git 2.5.0 badly
+	-- broke its option parser.
+	unlessM (boolSystemNonConcurrent "git" (fetchparams hin hout)) $
+		errorMessage "git fetch from client failed"
+	wait forwarder
+	unlessM (boolSystemNonConcurrent "git" [Param "merge", Param "FETCH_HEAD"]) $
+		errorMessage "git merge from client failed"
+  where
+	fetchparams hin hout =
+		[ Param "fetch"
+		, Param "--progress"
+		, Param "--upload-pack"
+		, Param $ "./propellor --gitpush " ++ show hin ++ " " ++ show hout
+		, Param "."
+		]
+
+-- Shim for git push over the propellor ssh channel.
+-- Reads from stdin and sends it to hout;
+-- reads from hin and sends it to stdout.
+gitPushHelper :: Fd -> Fd -> IO ()
+gitPushHelper hin hout = void $ fromstdin `concurrently` tostdout
+  where
+	fromstdin = do
+		h <- fdToHandle hout
+		stdin *>* h
+	tostdout = do
+		h <- fdToHandle hin
+		h *>* stdout
+
+-- Forward data from one handle to another.
+(*>*) :: Handle -> Handle -> IO ()
+fromh *>* toh = do
+	b <- B.hGetSome fromh 40960
+	if B.null b
+		then do
+			hClose fromh
+			hClose toh
+		else do
+			B.hPut toh b
+			hFlush toh
+			fromh *>* toh

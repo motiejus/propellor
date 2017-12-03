@@ -5,6 +5,8 @@
 -- the messages will be displayed sequentially.
 
 module Propellor.Message (
+	Trace(..),
+	parseTrace,
 	getMessageHandle,
 	isConsole,
 	forceConsole,
@@ -14,7 +16,6 @@ module Propellor.Message (
 	infoMessage,
 	errorMessage,
 	stopPropellorMessage,
-	processChainOutput,
 	messagesDone,
 	createProcessConcurrent,
 	withConcurrentOutput,
@@ -22,6 +23,7 @@ module Propellor.Message (
 
 import System.Console.ANSI
 import System.IO
+import Control.Monad.IfElse
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import System.IO.Unsafe (unsafePerformIO)
 import Control.Concurrent
@@ -31,12 +33,26 @@ import Prelude
 
 import Propellor.Types
 import Propellor.Types.Exception
-import Utility.PartialPrelude
 import Utility.Monad
+import Utility.Env
 import Utility.Exception
+import Utility.PartialPrelude
+
+-- | Serializable tracing. Export `PROPELLOR_TRACE=1` in the environment to
+-- make propellor emit these to stdout, in addition to its other output.
+data Trace 
+	= ActionStart (Maybe HostName) Desc
+	| ActionEnd (Maybe HostName) Desc Result
+	deriving (Read, Show)
+
+-- | Given a line read from propellor, if it's a serialized Trace,
+-- parses it.
+parseTrace :: String -> Maybe Trace
+parseTrace = readish
 
 data MessageHandle = MessageHandle
 	{ isConsole :: Bool
+	, traceEnabled :: Bool
 	}
 
 -- | A shared global variable for the MessageHandle.
@@ -45,10 +61,15 @@ globalMessageHandle :: MVar MessageHandle
 globalMessageHandle = unsafePerformIO $ 
 	newMVar =<< MessageHandle
 		<$> catchDefaultIO False (hIsTerminalDevice stdout)
+		<*> ((== Just "1") <$> getEnv "PROPELLOR_TRACE")
 
 -- | Gets the global MessageHandle.
 getMessageHandle :: IO MessageHandle
 getMessageHandle = readMVar globalMessageHandle
+
+trace :: Trace -> IO ()
+trace t = whenM (traceEnabled <$> getMessageHandle) $
+	putStrLn $ show t
 
 -- | Force console output. This can be used when stdout is not directly
 -- connected to a console, but is eventually going to be displayed at a
@@ -65,16 +86,17 @@ whenConsole s = ifM (isConsole <$> getMessageHandle)
 
 -- | Shows a message while performing an action, with a colored status
 -- display.
-actionMessage :: (MonadIO m, MonadMask m, ActionResult r) => Desc -> m r -> m r
+actionMessage :: (MonadIO m, MonadMask m, ActionResult r, ToResult r) => Desc -> m r -> m r
 actionMessage = actionMessage' Nothing
 
 -- | Shows a message while performing an action on a specified host,
 -- with a colored status display.
-actionMessageOn :: (MonadIO m, MonadMask m, ActionResult r) => HostName -> Desc -> m r -> m r
+actionMessageOn :: (MonadIO m, MonadMask m, ActionResult r, ToResult r) => HostName -> Desc -> m r -> m r
 actionMessageOn = actionMessage' . Just
 
-actionMessage' :: (MonadIO m, ActionResult r) => Maybe HostName -> Desc -> m r -> m r
+actionMessage' :: (MonadIO m, ActionResult r, ToResult r) => Maybe HostName -> Desc -> m r -> m r
 actionMessage' mhn desc a = do
+	liftIO $ trace $ ActionStart mhn desc
 	liftIO $ outputConcurrent
 		=<< whenConsole (setTitleCode $ "propellor: " ++ desc)
 
@@ -88,6 +110,7 @@ actionMessage' mhn desc a = do
 		, let (msg, intensity, color) = getActionResult r
 		  in colorLine intensity color msg
 		]
+	liftIO $ trace $ ActionEnd mhn desc (toResult r)
 
 	return r
   where
@@ -102,7 +125,7 @@ actionMessage' mhn desc a = do
 
 warningMessage :: MonadIO m => String -> m ()
 warningMessage s = liftIO $
-	outputConcurrent =<< colorLine Vivid Magenta ("** warning: " ++ s)
+	errorConcurrent =<< colorLine Vivid Magenta ("** warning: " ++ s)
 
 infoMessage :: MonadIO m => [String] -> m ()
 infoMessage ls = liftIO $ outputConcurrent $ concatMap (++ "\n") ls
@@ -113,7 +136,7 @@ infoMessage ls = liftIO $ outputConcurrent $ concatMap (++ "\n") ls
 -- property fail. Propellor will continue to the next property.
 errorMessage :: MonadIO m => String -> m a
 errorMessage s = liftIO $ do
-	outputConcurrent =<< colorLine Vivid Red ("** error: " ++ s)
+	errorConcurrent =<< colorLine Vivid Red ("** error: " ++ s)
 	-- Normally this exception gets caught and is not displayed,
 	-- and propellor continues. So it's only displayed if not
 	-- caught, and so we say, cannot continue.
@@ -141,27 +164,6 @@ colorLine intensity color msg = concat <$> sequence
 	-- the color set and reset happen in the same line.
 	, pure "\n"
 	]
-
--- | Reads and displays each line from the Handle, except for the last line
--- which is a Result.
-processChainOutput :: Handle -> IO Result
-processChainOutput h = go Nothing
-  where
-	go lastline = do
-		v <- catchMaybeIO (hGetLine h)
-		case v of
-			Nothing -> case lastline of
-				Nothing -> do
-					return FailedChange
-				Just l -> case readish l of
-					Just r -> pure r
-					Nothing -> do
-						outputConcurrent (l ++ "\n")
-						return FailedChange
-			Just s -> do
-				outputConcurrent $
-					maybe "" (\l -> if null l then "" else l ++ "\n") lastline
-				go (Just s)
 
 -- | Called when all messages about properties have been printed.
 messagesDone :: IO ()

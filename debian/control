@@ -7,7 +7,7 @@ Build-Depends:
 	ghc (>= 7.6),
 	cabal-install,
 	libghc-async-dev,
-	libghc-missingh-dev,
+	libghc-split-dev,
 	libghc-hslogger-dev,
 	libghc-unix-compat-dev,
 	libghc-ansi-terminal-dev,
@@ -18,7 +18,7 @@ Build-Depends:
 	libghc-exceptions-dev (>= 0.6),
 	libghc-stm-dev,
 	libghc-text-dev,
-	libghc-concurrent-output-dev,
+	libghc-hashable-dev,
 Maintainer: Joey Hess <id@joeyh.name>
 Standards-Version: 3.9.8
 Vcs-Git: git://git.joeyh.name/propellor
@@ -31,7 +31,7 @@ Depends: ${misc:Depends}, ${shlibs:Depends},
 	ghc (>= 7.4),
 	cabal-install,
 	libghc-async-dev,
-	libghc-missingh-dev,
+	libghc-split-dev,
 	libghc-hslogger-dev,
 	libghc-unix-compat-dev,
 	libghc-ansi-terminal-dev,
@@ -42,7 +42,7 @@ Depends: ${misc:Depends}, ${shlibs:Depends},
 	libghc-exceptions-dev (>= 0.6),
 	libghc-stm-dev,
 	libghc-text-dev,
-	libghc-concurrent-output-dev,
+	libghc-hashable-dev,
 	git,
 Description: property-based host configuration management in haskell
  Propellor ensures that the system it's run in satisfies a list of

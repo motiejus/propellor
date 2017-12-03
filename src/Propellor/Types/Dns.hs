@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Propellor.Types.Dns where
 
@@ -6,12 +7,12 @@ import Propellor.Types.OS (HostName)
 import Propellor.Types.Empty
 import Propellor.Types.Info
 import Propellor.Types.ConfigurableValue
+import Utility.Split
 
 import Data.Word
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.List
-import Data.String.Utils (split, replace)
 import Data.Monoid
 import Prelude
 
@@ -36,16 +37,36 @@ toAliasesInfo l = AliasesInfo (S.fromList l)
 fromAliasesInfo :: AliasesInfo -> [HostName]
 fromAliasesInfo (AliasesInfo s) = S.toList s
 
-newtype DnsInfo = DnsInfo { fromDnsInfo :: S.Set Record }
+-- | Use this for DNS Info that should propagate from a container to a
+-- host. For example, this can be used for CNAME to make aliases
+-- of the containers in the host be reflected in the DNS.
+newtype DnsInfoPropagated = DnsInfoPropagated
+	{ fromDnsInfoPropagated :: S.Set Record }
 	deriving (Show, Eq, Ord, Monoid, Typeable)
 
-toDnsInfo :: S.Set Record -> DnsInfo
-toDnsInfo = DnsInfo
+toDnsInfoPropagated :: S.Set Record -> DnsInfoPropagated
+toDnsInfoPropagated = DnsInfoPropagated
 
--- | DNS Info is propagated, so that eg, aliases of a container
--- are reflected in the dns for the host where it runs.
-instance IsInfo DnsInfo where
+instance IsInfo DnsInfoPropagated where
 	propagateInfo _ = PropagateInfo True
+
+-- | Use this for DNS Info that should not propagate from a container to a
+-- host. For example, an IP address of a container should not influence
+-- the host.
+newtype DnsInfoUnpropagated = DnsInfoUnpropagated
+	{ fromDnsInfoUnpropagated :: S.Set Record }
+	deriving (Show, Eq, Ord, Monoid, Typeable)
+
+toDnsInfoUnpropagated :: S.Set Record -> DnsInfoUnpropagated
+toDnsInfoUnpropagated = DnsInfoUnpropagated
+
+-- | Get all DNS Info.
+getDnsInfo :: Info -> S.Set Record
+getDnsInfo i = fromDnsInfoUnpropagated (fromInfo i)
+	`S.union` fromDnsInfoPropagated (fromInfo i)
+
+instance IsInfo DnsInfoUnpropagated where
+	propagateInfo _ = PropagateInfo False
 
 -- | Represents a bind 9 named.conf file.
 data NamedConf = NamedConf
@@ -102,14 +123,14 @@ data Record
 type ReverseIP = String
 
 reverseIP :: IPAddr -> ReverseIP
-reverseIP (IPv4 addr) = intercalate "." (reverse $ split "." addr) ++ ".in-addr.arpa"
+reverseIP (IPv4 addr) = intercalate "." (reverse $ splitc '.' addr) ++ ".in-addr.arpa"
 reverseIP addr@(IPv6 _) = reverse (intersperse '.' $ replace ":" "" $ val $ canonicalIP addr) ++ ".ip6.arpa"
 
 -- | Converts an IP address (particularly IPv6) to canonical, fully
 -- expanded form.
 canonicalIP :: IPAddr -> IPAddr
 canonicalIP (IPv4 addr) = IPv4 addr
-canonicalIP (IPv6 addr) = IPv6 $ intercalate ":" $ map canonicalGroup $ split ":" $ replaceImplicitGroups addr
+canonicalIP (IPv6 addr) = IPv6 $ intercalate ":" $ map canonicalGroup $ splitc ':' $ replaceImplicitGroups addr
   where
 	canonicalGroup g
 		| l <= 4    = replicate (4 - l) '0' ++ g
@@ -117,7 +138,7 @@ canonicalIP (IPv6 addr) = IPv6 $ intercalate ":" $ map canonicalGroup $ split ":
 	  where
 		l = length g
 	emptyGroups n = iterate (++ ":") "" !! n
-	numberOfImplicitGroups a = 8 - length (split ":" $ replace "::" "" a)
+	numberOfImplicitGroups a = 8 - length (splitc ':' $ replace "::" "" a)
 	replaceImplicitGroups a = concat $ aux $ split "::" a
 	  where
 		aux [] = []

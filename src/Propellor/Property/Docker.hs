@@ -59,13 +59,13 @@ import qualified Propellor.Property.Pacman as Pacman
 import qualified Propellor.Shim as Shim
 import Utility.Path
 import Utility.ThreadScheduler
+import Utility.Split
 
 import Control.Concurrent.Async hiding (link)
 import System.Posix.Directory
 import System.Posix.Process
 import Prelude hiding (init)
 import Data.List hiding (init)
-import Data.List.Utils
 import qualified Data.Map as M
 import System.Console.Concurrent
 
@@ -576,8 +576,7 @@ provisionContainer cid = containerDesc cid $ property "provisioned" $ liftIO $ d
 	let p = inContainerProcess cid
 		(if isConsole msgh then ["-it"] else [])
 		(shim : params)
-	r <- withHandle StdoutHandle createProcessSuccess p $
-		processChainOutput
+	r <- chainPropellor p
 	when (r /= FailedChange) $
 		setProvisionedFlag cid
 	return r
@@ -596,10 +595,9 @@ chain hostlist hn s = case toContainerId s of
   where
 	go cid h = do
 		changeWorkingDirectory localdir
-		onlyProcess (provisioningLock cid) $ do
-			r <- runPropellor h $ ensureChildProperties $ hostProperties h
-			flushConcurrentOutput
-			putStrLn $ "\n" ++ show r
+		onlyProcess (provisioningLock cid) $
+			runChainPropellor h $ 
+				ensureChildProperties $ hostProperties h
 
 stopContainer :: ContainerId -> IO Bool
 stopContainer cid = boolSystem dockercmd [Param "stop", Param $ fromContainerId cid ]
