@@ -88,6 +88,8 @@ binandsrc :: String -> SourcesGenerator
 binandsrc url suite = catMaybes
 	[ Just l
 	, Just $ srcLine l
+	, sul
+	, srcLine <$> sul
 	, bl
 	, srcLine <$> bl
 	]
@@ -96,6 +98,10 @@ binandsrc url suite = catMaybes
 	bl = do
 		bs <- backportSuite suite
 		return $ debLine bs url stdSections
+	-- formerly known as 'volatile'
+	sul = do
+		sus <- stableUpdatesSuite suite
+		return $ debLine sus url stdSections
 
 stdArchiveLines :: Propellor SourcesGenerator
 stdArchiveLines = return . binandsrc =<< getMirror
@@ -235,26 +241,38 @@ type Package = String
 installed :: [Package] -> Property DebianLike
 installed = installed' ["-y"]
 
+-- | Minimal install of package, without recommends.
+installedMin :: [Package] -> Property DebianLike
+installedMin = installed' ["--no-install-recommends", "-y"]
+
 installed' :: [String] -> [Package] -> Property DebianLike
 installed' params ps = robustly $ check (not <$> isInstalled' ps) go
 	`describe` unwords ("apt installed":ps)
   where
 	go = runApt (params ++ ["install"] ++ ps)
 
-installedBackport :: [Package] -> Property Debian
-installedBackport ps = withOS desc $ \w o -> case o of
+-- | Install packages from the stable-backports suite.
+--
+-- If installing the backport requires installing versions of a package's
+-- dependencies from stable-backports too, you will need to include those
+-- dependencies in the list of packages passed to this function.
+backportInstalled :: [Package] -> Property Debian
+backportInstalled = backportInstalled' ["-y"]
+
+-- | Minimal install from the stable-backports suite, without recommends.
+backportInstalledMin :: [Package] -> Property Debian
+backportInstalledMin = backportInstalled' ["--no-install-recommends", "-y"]
+
+backportInstalled' :: [String] -> [Package] -> Property Debian
+backportInstalled' params ps = withOS desc $ \w o -> case o of
 	(Just (System (Debian _ suite) _)) -> case backportSuite suite of
 		Nothing -> unsupportedOS'
 		Just bs -> ensureProperty w $
-			runApt (["install", "-t", bs, "-y"] ++ ps)
+			runApt (("install":params) ++ ((++ '/':bs) <$> ps))
 				`changesFile` dpkgStatus
 	_ -> unsupportedOS'
   where
 	desc = unwords ("apt installed backport":ps)
-
--- | Minimal install of package, without recommends.
-installedMin :: [Package] -> Property DebianLike
-installedMin = installed' ["--no-install-recommends", "-y"]
 
 removed :: [Package] -> Property DebianLike
 removed ps = check (any (== IsInstalled) <$> getInstallStatus ps)
@@ -447,7 +465,7 @@ trustsKey k = trustsKey' k <!> untrustKey k
 trustsKey' :: AptKey -> Property DebianLike
 trustsKey' k = check (not <$> doesFileExist f) $ property desc $ makeChange $ do
 	withHandle StdinHandle createProcessSuccess
-		(proc "gpg" ["--no-default-keyring", "--keyring", f, "--import", "-"]) $ \h -> do
+		(proc "apt-key" ["--keyring", f, "add", "-"]) $ \h -> do
 			hPutStr h (pubkey k)
 			hClose h
 	nukeFile $ f ++ "~" -- gpg dropping

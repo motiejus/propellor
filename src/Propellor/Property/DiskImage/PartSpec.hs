@@ -9,6 +9,7 @@ module Propellor.Property.DiskImage.PartSpec (
 	partition,
 	-- * PartSpec combinators
 	swapPartition,
+	rawPartition,
 	mountedAt,
 	addFreeSpace,
 	setSize,
@@ -42,17 +43,22 @@ import Propellor.Property.Mount
 
 import Data.List (sortBy)
 import Data.Ord
+import qualified Data.Semigroup as Sem
 
 -- | Specifies a partition with a given filesystem.
 --
 -- The partition is not mounted anywhere by default; use the combinators
 -- below to configure it.
 partition :: Monoid t => Fs -> PartSpec t
-partition fs = (Nothing, mempty, mkPartition fs, mempty)
+partition fs = (Nothing, mempty, mkPartition (Just fs), mempty)
 
 -- | Specifies a swap partition of a given size.
 swapPartition :: Monoid t => PartSize -> PartSpec t
-swapPartition sz = (Nothing, mempty, const (mkPartition LinuxSwap sz), mempty)
+swapPartition sz = (Nothing, mempty, const (mkPartition (Just LinuxSwap) sz), mempty)
+
+-- | Specifies a partition without any filesystem, of a given size.
+rawPartition :: Monoid t => PartSize -> PartSpec t
+rawPartition sz = (Nothing, mempty, const (mkPartition Nothing sz), mempty)
 
 -- | Specifies where to mount a partition.
 mountedAt :: PartSpec t -> MountPoint -> PartSpec t
@@ -105,7 +111,7 @@ data PartInfoVal
 	| AdjustPartSpecInfo MountPoint (PartSpec PartLocation -> PartSpec PartLocation)
 
 newtype PartInfo = PartInfo [PartInfoVal]
-	deriving (Monoid, Typeable)
+	deriving (Monoid, Sem.Semigroup, Typeable)
 
 instance IsInfo PartInfo where
 	propagateInfo _ = PropagateInfo False
@@ -160,8 +166,8 @@ hasPartition p@(mmp, _, _, _) = pureInfoProperty desc
 	(PartInfo [PartSpecInfo p])
   where
 	desc = case mmp of
-		Just mp -> "has " ++ mp ++ " partition"
-		Nothing -> "has unmounted partition"
+		Just mp -> mp ++ " partition"
+		Nothing -> "unmounted partition"
 
 -- | Adjusts the PartSpec for the partition mounted at the specified location.
 --
@@ -170,7 +176,7 @@ hasPartition p@(mmp, _, _, _) = pureInfoProperty desc
 -- > 	& adjustPartition "/boot" (`addFreeSpace` MegaBytes 150)
 adjustPartition :: MountPoint -> (PartSpec PartLocation -> PartSpec PartLocation) -> Property (HasInfo + UnixLike)
 adjustPartition mp f = pureInfoProperty
-	("has " ++ mp ++ " adjusted")
+	(mp ++ " adjusted")
 	(PartInfo [AdjustPartSpecInfo mp f])
 
 -- | Indicates partition layout in a disk. Default is somewhere in the
@@ -178,9 +184,12 @@ adjustPartition mp f = pureInfoProperty
 data PartLocation = Beginning | Middle | End
 	deriving (Eq, Ord)
 
+instance Sem.Semigroup PartLocation where
+	_ <> b = b
+
 instance Monoid PartLocation where
 	mempty = Middle
-	mappend _ b = b
+	mappend = (Sem.<>)
 
 partLocation :: PartSpec PartLocation -> PartLocation -> PartSpec PartLocation
 partLocation (mp, o, p, _) l = (mp, o, p, l)

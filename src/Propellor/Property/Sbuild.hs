@@ -29,6 +29,7 @@ Suggested usage in @config.hs@:
 >    where
 >  	sidSchrootBuilt = Sbuild.built Sbuild.UseCcache $ props
 >  		& osDebian Unstable X86_32
+>  		& Sbuild.osDebianStandard
 >  		& Sbuild.update `period` Weekly (Just 1)
 >  		& Sbuild.useHostProxy mybox
 
@@ -48,6 +49,14 @@ To take advantage of the piuparts and autopkgtest support, add to your
 >
 >  $autopkgtest_root_args = "";
 >  $autopkgtest_opts = ["--", "schroot", "%r-%a-sbuild"];
+
+On Debian jessie hosts, you should ensure that sbuild and autopkgtest come from
+the same suite.  This is because the autopkgtest binary changed its name between
+jessie and stretch.  If you have not installed backports of sbuild or
+autopkgtest, you don't need to do anything.  But if you have installed either
+package from jessie-backports (with Propellor or otherwise), you should install
+the other from jessie-backports, too.
+
 -}
 
 module Propellor.Property.Sbuild (
@@ -57,6 +66,7 @@ module Propellor.Property.Sbuild (
 	-- * Properties for use inside sbuild schroots
 	update,
 	useHostProxy,
+	osDebianStandard,
 	-- * Global sbuild configuration
 	-- blockNetwork,
 	keypairGenerated,
@@ -78,8 +88,8 @@ import qualified Propellor.Property.File as File
 -- import qualified Propellor.Property.Firewall as Firewall
 import qualified Propellor.Property.Schroot as Schroot
 import qualified Propellor.Property.Reboot as Reboot
+import qualified Propellor.Property.Localdir as Localdir
 import qualified Propellor.Property.User as User
-import Utility.FileMode
 
 import Data.List
 
@@ -214,8 +224,11 @@ built' cc (Props ps) suite arch = provisioned <!> deleted
 	schroot = Chroot.debootstrapped Debootstrap.BuilddD
 			schrootRoot (Props schrootProps)
 	schrootProps =
-		ps ++ [toChildProperty Apt.stdSourcesList
-		, toChildProperty $ Apt.installed ["eatmydata", "ccache"]]
+		ps ++ [toChildProperty $ Apt.installed ["eatmydata", "ccache"]
+		-- Drop /usr/local/propellor since build chroots should be
+		-- clean.  Note that propellor does not have to install its
+		-- build-deps into the chroot, so this is sufficient cleanup
+		, toChildProperty $ Localdir.removed]
 
 	-- static values
 	suiteArch = suite ++ "-" ++ arch
@@ -242,6 +255,12 @@ built' cc (Props ps) suite arch = provisioned <!> deleted
 		_ -> base
 	  where
 		base = ["eatmydata"]
+
+-- | Properties that will be wanted in almost any Debian schroot, but not in
+-- schroots for other operating systems.
+osDebianStandard :: Property Debian
+osDebianStandard = propertyList "standard Debian sbuild properties" $ props
+	& Apt.stdSourcesList
 
 -- | Ensure that an sbuild schroot's packages and apt indexes are updated
 --
@@ -376,6 +395,13 @@ ccachePrepared = propertyList "sbuild group ccache configured" $ props
 --
 -- You probably want a custom ~/.sbuildrc on your workstation, but
 -- this property is handy for quickly setting up build boxes.
+--
+-- On Debian jessie hosts, you should ensure that sbuild and autopkgtest come
+-- from the same suite.  This is because the autopkgtest binary changed its name
+-- between jessie and stretch.  If you have not installed backports of sbuild or
+-- autopkgtest, you don't need to do anything.  But if you have installed either
+-- package from jessie-backports (with Propellor or otherwise), you should
+-- install the other from jessie-backports, too.
 userConfig :: User -> Property DebianLike
 userConfig user@(User u) = go
 	`requires` usableBy user

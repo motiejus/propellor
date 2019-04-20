@@ -36,6 +36,9 @@ data BorgRepoOpt
 	-- | Use to specify a ssh private key to use when accessing a
 	-- BorgRepo.
 	= UseSshKey FilePath
+	-- | Use to specify an environment variable to set when running
+	-- borg on a BorgRepo.
+	| UsesEnvVar (String, String)
 
 repoLoc :: BorgRepo -> String
 repoLoc (BorgRepo s) = s
@@ -53,14 +56,18 @@ runBorgEnv (BorgRepo _) = []
 runBorgEnv (BorgRepoUsing os _) = map go os
   where
 	go (UseSshKey k) = ("BORG_RSH", "ssh -i " ++ k)
+	go (UsesEnvVar (k, v)) = (k, v)
 
 installed :: Property DebianLike
-installed = withOS desc $ \w o -> case o of
-	(Just (System (Debian _ (Stable "jessie")) _)) -> ensureProperty w $
-		Apt.installedBackport ["borgbackup"]
-	_ -> ensureProperty w $
-		Apt.installed ["borgbackup"]
+installed = pickOS installdebian aptinstall
   where
+	installdebian :: Property Debian
+	installdebian = withOS desc $ \w o -> case o of
+		(Just (System (Debian _ (Stable "jessie")) _)) -> ensureProperty w $
+			Apt.backportInstalled ["borgbackup", "python3-msgpack"]
+		_ -> ensureProperty w $
+			Apt.installed ["borgbackup"]
+	aptinstall = Apt.installed ["borgbackup"] `describe` desc
         desc = "installed borgbackup"
 
 repoExists :: BorgRepo -> IO Bool

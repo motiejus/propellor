@@ -1,8 +1,247 @@
-propellor (5.1.1) UNRELEASED; urgency=medium
+propellor (5.8.0) UNRELEASED; urgency=medium
 
+  * Fix bug in File.containsShellSetting that replaced whole shell conffile
+    content with the setting if the file did not previously contain a line
+    setting the key to some value.
+  * Removed inChroot, instead use hasContainerCapability FilesystemContained.
+    (API change)
+  * Hostname: Properties that used to not do anything in a systemd or
+    docker container will now change the container's hostname,
+    since it's namespaced.
+  * Add User.ownsWithPrimaryGroup
+    Thanks, Sean Whitton
+  * Ssh.userKeys, Ssh.userKeyAt: Create .ssh directory when it does not yet
+    exist.
+  * Ssh.userKeyAt: When a relative filepath is provided, it's put inside
+    the user's .ssh directory.
+
+ -- Joey Hess <id@joeyh.name>  Mon, 08 Apr 2019 11:09:04 -0400
+
+propellor (5.7.0) unstable; urgency=medium
+
+  * Sbuild.built no longer includes Apt.stdSourcesList by default,
+    in order to support non-Debian OS's. (API change)
+    To upgrade: Simply add Sbuild.osDebianStandard to all Sbuild.built
+    calls which have osDebian.
+    Thanks, Sean Whitton
+  * Propellor.Property.PropellorRepo renamed to Propellor.Property.Localdir
+    to widen its scope. (API change)
+  * Added Localdir.removed property.
+    Thanks, Sean Whitton
+  * Sbuild.built uses Localdir.removed to clean up the propellor localdir
+    after it's done running in a schroot.
+    Thanks, Sean Whitton
+  * Cron.runPropellor made revertable. (minor API change)
+    Thanks, Sean Whitton
+  * Added Cron.jobDropped.
+    Thanks, Sean Whitton
+  * Added Utility.FileMode to the modules exported by Propellor.Utilities
+    to propellor library users.
+
+ -- Joey Hess <id@joeyh.name>  Fri, 05 Apr 2019 11:59:52 -0400
+
+propellor (5.6.1) unstable; urgency=medium
+
+  * fix Libvirt.hs haddock build
+    Thanks, Sean Whitton
+
+ -- Joey Hess <id@joeyh.name>  Sun, 20 Jan 2019 19:06:39 -0400
+
+propellor (5.6.0) unstable; urgency=medium
+
+  * withOS had a type level bug that allowed ensureProperty to be used inside
+    it with a Property that does not match the type of the withOS itself.
+    (API change)
+    The fix may cause some of your valid uses of withOS to no longer type
+    check; the best way to work around that is to use pickOS to pick between
+    several properties that are further specialized using withOS.
+    For an example of how to do that, see the source code to
+    Propellor.Property.Borg.installed
+  * Propellor.Property.Cron.runPropellor is a Property DebianLike; it was
+    incorrectly a Property UnixLike before and that wrong type was hidden by
+    the withOS bug.
+  * Some openbsd portability fixes. Thanks, rsiddharth.
+  * Added Libvirt module. Thanks, Sean Whitton.
+  * When bootstrapping on Debian, libghc-stm-dev may not be available,
+    as it's become part of ghc, so check before trying to install it.
+  * Fix build with ghc 8.6.3.
+  * Avoid exposing the constructor of OuterMetaTypesWitness, to avoid
+    the kind of mistake that led to the withOS bug.
+  * Merged Utility changes from git-annex.
+  * Fix --spin crash when ~/.ssh/ directory did not already exist.
+
+ -- Joey Hess <id@joeyh.name>  Fri, 18 Jan 2019 12:11:53 -0400
+
+propellor (5.5.0) unstable; urgency=medium
+
+  * letsencrypt': Pass --expand to support expanding the list of domains
+  * Split mailname property out of Hostname.sane, since bad mailname
+    guesses can lead to ugly surprises. (API change)
+  * Removed HostingProvider.CloudatCost module as it lacks a maintainer.
+    (If anyone would like to maintain it, send a patch adding it back.)
+    (API change)
+  * Added Systemd.escapePath helper function useful when creating mount
+    units.
+  * Added Sudo.sudoersDFile property.
+  * Sudo.enabledFor: Write to /etc/sudoers.d/000users rather than to
+    /etc/sudoers. (Any old lines it wrote to /etc/sudoers will be removed.)
+    This fixes a potential ordering problem; the property used to append
+    the line to /etc/sudoers, but that would override more specific lines
+    in the include directory.
+  * Borg: Added UsesEnvVar.
+  * Added DiskImage.noBootloader, useful for eg, direct booting with
+    qemu. Thanks, David Bremner.
+  * Added Apt.backportInstalledMin.
+
+ -- Joey Hess <id@joeyh.name>  Sat, 20 Oct 2018 21:00:27 -0400
+
+propellor (5.4.1) unstable; urgency=medium
+
+  * Modernized and simplified the MetaTypes implementation now that
+    compatability with ghc 7 is no longer needed.
+  * Use git verify-commit to verify gpg signatures, rather than the old
+    method of parsing git log output. Needs git 2.0.
+  * Added ConfFile.containsShellSetting, ConfFile.lacksShellSetting,
+    and EtcDefault.set properties. Thanks, Sean Whitton
+  * Dns: Support TXT values longer than bind's maximum string length
+    of 255 bytes. Thanks, rsiddharth.
+  * Docker and HostingProvider.CloudAtCost modules are not being
+    maintained, so marked them as such.
+    Seeking a maintainer for the Docker module; I anticipate
+    removing the CloudAtCost module in the next API bump.
+
+ -- Joey Hess <id@joeyh.name>  Wed, 08 Aug 2018 10:29:27 -0400
+
+propellor (5.4.0) unstable; urgency=medium
+
+  [ Sean Whitton ]
+  * Apt.installedBackport replaced with Apt.backportInstalled.  (API change)
+    The old property would install dependencies from backports even when
+    the versions in stable satisfy the requested backport's dependencies.
+    The new property installs only the listed packages from backports;
+    all other dependencies come from stable.
+    So in some cases, you may need to list additional backports to install,
+    that would not have needed to be listed before. Due to this behavior
+    change the property has been renamed so uses of it will be checked.
+  * Restic.installed: stop trying to install a backport on jessie, because no
+    such backport exists.
+
+ -- Joey Hess <id@joeyh.name>  Thu, 17 May 2018 10:43:20 -0400
+
+propellor (5.3.6) unstable; urgency=medium
+
+  * Fix build with ghc 8.4, which broke due to the Semigroup Monoid change.
+  * Dropped support for building propellor with ghc 7 (as in debian
+    oldstable), to avoid needing to depend on the semigroups transitional
+    package, but also because it's just too old to be worth supporting.
+  * stack.yaml: Updated to lts-9.21.
+  * Make Schroot.overlaysInTmpfs revertable
+    Thanks, Sean Whitton
+  * Update shim each time propellor is run in a container, to deal with
+    library version changes.
+  * Unbound: Added support for various DNS record types.
+    Thanks, Félix Sipma.
+
+ -- Joey Hess <id@joeyh.name>  Wed, 09 May 2018 16:24:37 -0400
+
+propellor (5.3.5) unstable; urgency=medium
+
+  * Apt.stdSourcesList now adds stable-updates suite
+    Thanks, Sean Whitton
+  * Significantly increased propellor build speed when your config.hs
+    is in a fork of the propellor repository, by avoiding redundant builds
+    of propellor library.
+
+ -- Joey Hess <id@joeyh.name>  Sun, 22 Apr 2018 12:27:45 -0400
+
+propellor (5.3.4) unstable; urgency=medium
+
+  * Apt.trustsKey: Use apt-key to add key rather than manually driving gpg,
+    which seems to not work anymore.
+    Thanks, Russell Sim.
+  * Firewall: Reorder iptables parameters that are order
+    dependant to make --to-dest and --to-source work.
+    Thanks, Russell Sim
+
+ -- Joey Hess <id@joeyh.name>  Wed, 21 Mar 2018 14:59:15 -0400
+
+propellor (5.3.3) unstable; urgency=medium
+
+  * Warn again about new upstream version when ~/.propellor was cloned from the
+    Debian git bundle using an older version of propellor that set up an
+    upstream remote.
+  * Avoid crashing if initial fetch from origin fails when spinning a host.
+  * Added Propllor.Property.Openssl module contributed by Félix Sipma.
+
+ -- Joey Hess <id@joeyh.name>  Mon, 26 Feb 2018 14:34:37 -0400
+
+propellor (5.3.2) unstable; urgency=medium
+
+  * Added Propellor.Property.Atomic, which can make a non-atomic property
+    that operates on a directory into an atomic property.
+    (Inspired by Vaibhav Sagar's talk on Functional Devops in a
+    Dysfunctional World at LCA 2018.)
+  * Added Git.pulled.
+  * Systemd.machined: Install systemd-container on Debian
+    stretch.
+    Thanks, Sean Whitton
+
+ -- Joey Hess <id@joeyh.name>  Sun, 18 Feb 2018 14:31:39 -0400
+
+propellor (5.3.1) unstable; urgency=medium
+
+  * Last release mistakenly contained my personal branch not master.
+  * contrib/post-merge-hook documentation updated to recommend also using
+    it as a post-checkout hook, to avoid such problems.
+
+ -- Joey Hess <id@joeyh.name>  Sun, 04 Feb 2018 12:00:03 -0400
+
+propellor (5.3.0) unstable; urgency=medium
+
+  * Avoid bogus warning about new upstream version when /usr/bin/propellor
+    is run on a Debian system, but ~/.propellor was not cloned from the
+    Debian git bundle.
+  * Parted: Allow partitions to have no filesystem, for eg, GPT BIOS boot
+    partitions. (API change)
+  * Added rawPartition to PartSpec, for specifying partitions with no
+    filesystem.
+  * Added BiosGrubFlag to PartFlag.
+  * Add HasCallStack constraint to pickOS and unsupportedOS, so the
+    call stack includes the caller.
+  * Run su with --login, to avoid inheriting some problematic environment
+    variables, such as TMP, from the caller.
+  * Grub: Added properties to configure /etc/default/grub.
+  * Laptop: New module, starting with powertopAutoTuneOnBoot.
+
+ -- Joey Hess <id@joeyh.name>  Thu, 01 Feb 2018 12:27:01 -0400
+
+propellor (5.2.0) unstable; urgency=medium
+
+  [ Joey Hess ]
   * bootstrappedFrom: Set up local privdata file.
+  * Parted: Fix names used for FAT and VFAT partitions.
+  * Parted: Add an Alignment parameter. (API change)
+    A good default to use is safeAlignment, which is 4MiB,
+    well suited for inexpensive flash drives, and fine for other disks too.
+    Previously, a very non-optimial 1MB (not 1MiB) alignment had been used.
+  * DiskImage: Use safeAlignment. It didn't seem worth making the
+    alignment configurable here.
+  * Fixed rounding bug in Parted.calcPartTable.
+  * DiskImage: Fix rsync crash when a mount point does not exist in the
+    chroot.
+  * Fix bug in unmountBelow that caused unmounting of nested mounts to
+    fail.
+  * Grub.boots, Grub.bootsMounted: Pass --target to grub-install.
+  * Added Propellor.Property.Installer modules, which can be used to create
+    bootable installer disk images, which then run propellor to install
+    a system. This code was extracted from the demo I gave in my
+    talk at DebConf 2017.
 
- -- Joey Hess <id@joeyh.name>  Wed, 29 Nov 2017 11:45:08 -0400
+  [ Sean Whitton ]
+  * Sbuild: add notes about Debian jessie hosts and backports of sbuild and
+    autopkgtest.
+
+ -- Joey Hess <id@joeyh.name>  Sat, 30 Dec 2017 13:34:29 -0400
 
 propellor (5.1.0) unstable; urgency=medium
 

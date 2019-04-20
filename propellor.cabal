@@ -1,6 +1,6 @@
 Name: propellor
-Version: 5.1.0
-Cabal-Version: >= 1.20
+Version: 5.7.0
+Cabal-Version: 1.20
 License: BSD2
 Maintainer: Joey Hess <id@joeyh.name>
 Author: Joey Hess
@@ -35,38 +35,6 @@ Description:
  .
  It is configured using haskell.
 
-Executable propellor
-  Default-Language: Haskell98
-  Main-Is: wrapper.hs
-  GHC-Options: -threaded -Wall -fno-warn-tabs -O0
-  if impl(ghc >= 8.0)
-    GHC-Options: -fno-warn-redundant-constraints
-  Default-Extensions: TypeOperators
-  Hs-Source-Dirs: src
-  Build-Depends:
-    -- propellor needs to support the ghc shipped in Debian stable,
-    -- and also only depends on packages in Debian stable.
-    base >= 4.5, base < 5,
-    directory, filepath, IfElse, process, bytestring, hslogger, split,
-    unix, unix-compat, ansi-terminal, containers (>= 0.5), network, async,
-    time, mtl, transformers, exceptions (>= 0.6), stm, text, hashable
-  Other-Modules:
-    Propellor.DotDir
-
-Executable propellor-config
-  Default-Language: Haskell98
-  Main-Is: propellor-config.hs
-  GHC-Options: -threaded -Wall -fno-warn-tabs -O0
-  if impl(ghc >= 8.0)
-    GHC-Options: -fno-warn-redundant-constraints
-  Default-Extensions: TypeOperators
-  Hs-Source-Dirs: src
-  Build-Depends:
-    base >= 4.5, base < 5,
-    directory, filepath, IfElse, process, bytestring, hslogger, split,
-    unix, unix-compat, ansi-terminal, containers (>= 0.5), network, async,
-    time, mtl, transformers, exceptions (>= 0.6), stm, text, hashable
-
 Library
   Default-Language: Haskell98
   GHC-Options: -Wall -fno-warn-tabs -O0
@@ -75,7 +43,9 @@ Library
   Default-Extensions: TypeOperators
   Hs-Source-Dirs: src
   Build-Depends:
-    base >= 4.5, base < 5,
+    -- propellor needs to support the ghc shipped in Debian stable,
+    -- and also only depends on packages in Debian stable.
+    base >= 4.9, base < 5,
     directory, filepath, IfElse, process, bytestring, hslogger, split,
     unix, unix-compat, ansi-terminal, containers (>= 0.5), network, async,
     time, mtl, transformers, exceptions (>= 0.6), stm, text, hashable
@@ -83,6 +53,7 @@ Library
   Exposed-Modules:
     Propellor
     Propellor.Base
+    Propellor.DotDir
     Propellor.Location
     Propellor.Precompiled
     Propellor.Property
@@ -90,6 +61,7 @@ Library
     Propellor.Property.Apache
     Propellor.Property.Apt
     Propellor.Property.Apt.PPA
+    Propellor.Property.Atomic
     Propellor.Property.Attic
     Propellor.Property.Bootstrap
     Propellor.Property.Borg
@@ -108,6 +80,7 @@ Library
     Propellor.Property.Dns
     Propellor.Property.DnsSec
     Propellor.Property.Docker
+    Propellor.Property.EtcDefault
     Propellor.Property.Fail2Ban
     Propellor.Property.File
     Propellor.Property.Firejail
@@ -122,11 +95,17 @@ Library
     Propellor.Property.Gpg
     Propellor.Property.Group
     Propellor.Property.Grub
+    Propellor.Property.Installer
+    Propellor.Property.Installer.Types
+    Propellor.Property.Installer.Target
     Propellor.Property.Journald
     Propellor.Property.Kerberos
+    Propellor.Property.Laptop
     Propellor.Property.LetsEncrypt
+    Propellor.Property.Libvirt
     Propellor.Property.List
     Propellor.Property.LightDM
+    Propellor.Property.Localdir
     Propellor.Property.Locale
     Propellor.Property.Logcheck
     Propellor.Property.Lvm
@@ -136,13 +115,13 @@ Library
     Propellor.Property.Nginx
     Propellor.Property.Obnam
     Propellor.Property.OpenId
+    Propellor.Property.Openssl
     Propellor.Property.OS
     Propellor.Property.Pacman
     Propellor.Property.Parted
     Propellor.Property.Parted.Types
     Propellor.Property.Partition
     Propellor.Property.Postfix
-    Propellor.Property.PropellorRepo
     Propellor.Property.Prosody
     Propellor.Property.Qemu
     Propellor.Property.Reboot
@@ -167,7 +146,6 @@ Library
     Propellor.Property.ZFS
     Propellor.Property.ZFS.Process
     Propellor.Property.ZFS.Properties
-    Propellor.Property.HostingProvider.CloudAtCost
     Propellor.Property.HostingProvider.DigitalOcean
     Propellor.Property.HostingProvider.Exoscale
     Propellor.Property.HostingProvider.Linode
@@ -207,6 +185,7 @@ Library
     Propellor.Types.ResultCheck
     Propellor.Types.Singletons
     Propellor.Types.ZFS
+    Propellor.Wrapper
   Other-Modules:
     Propellor.Bootstrap
     Propellor.Git
@@ -223,7 +202,11 @@ Library
     Utility.Data
     Utility.DataUnits
     Utility.Directory
+    Utility.Directory.Stream
+    Utility.Directory.TestDirectory
     Utility.Env
+    Utility.Env.Basic
+    Utility.Env.Set
     Utility.Exception
     Utility.FileMode
     Utility.FileSystemEncoding
@@ -233,10 +216,10 @@ Library
     Utility.Monad
     Utility.Path
     Utility.PartialPrelude
-    Utility.PosixFiles
     Utility.Process
     Utility.Process.Shim
     Utility.Process.NonConcurrent
+    Utility.Process.Transcript
     Utility.SafeCommand
     Utility.Scheduled
     Utility.Scheduled
@@ -245,11 +228,28 @@ Library
     Utility.Table
     Utility.ThreadScheduler
     Utility.Tmp
+    Utility.Tmp.Dir
     Utility.Tuple
     Utility.UserInfo
     System.Console.Concurrent
     System.Console.Concurrent.Internal
     System.Process.Concurrent
+    Paths_propellor
+
+Executable propellor-config
+  Default-Language: Haskell98
+  Hs-Source-Dirs: executables
+  Main-Is: propellor-config.hs
+  GHC-Options: -threaded -Wall -fno-warn-tabs
+  Default-Extensions: TypeOperators
+  Build-Depends: propellor, base
+
+Executable propellor
+  Default-Language: Haskell98
+  Hs-Source-Dirs: executables
+  Main-Is: wrapper.hs
+  GHC-Options: -threaded -Wall -fno-warn-tabs
+  Build-Depends: propellor, base
 
 source-repository head
   type: git

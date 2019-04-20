@@ -122,9 +122,9 @@ standardAutoBuilder suite arch flavor =
 		& Apt.stdSourcesList
 		& Apt.unattendedUpgrades
 		& Apt.cacheCleaned
-		& buildDepsApt
 		& User.accountFor (User builduser)
 		& tree (architectureToDebianArchString arch) flavor
+		& buildDepsApt
 
 stackAutoBuilder :: DebianSuite -> Architecture -> Flavor -> Property (HasInfo + Debian)
 stackAutoBuilder suite arch flavor =
@@ -140,7 +140,7 @@ stackAutoBuilder suite arch flavor =
 		-- Workaround https://github.com/commercialhaskell/stack/issues/2093
 		& Apt.installed ["libtinfo-dev"]
 
-stackInstalled :: Property Linux
+stackInstalled :: Property DebianLike
 stackInstalled = withOS "stack installed" $ \w o ->
 	case o of
 		(Just (System (Debian Linux (Stable "jessie")) arch)) ->
@@ -151,7 +151,7 @@ stackInstalled = withOS "stack installed" $ \w o ->
 	manualinstall :: Architecture -> Property Linux
 	manualinstall arch = tightenTargets $ check (not <$> doesFileExist binstack) $
 		propertyList "stack installed from upstream tarball" $ props
-			& cmdProperty "wget" ["https://www.stackage.org/stack/linux-" ++ archname, "-O", tmptar]
+			& cmdProperty "wget" [url, "-O", tmptar]
 				`assume` MadeChange
 			& File.dirExists tmpdir
 			& cmdProperty "tar" ["xf", tmptar, "-C", tmpdir, "--strip-components=1"]
@@ -160,60 +160,30 @@ stackInstalled = withOS "stack installed" $ \w o ->
 				`assume` MadeChange
 			& cmdProperty "rm" ["-rf", tmpdir, tmptar]
 				`assume` MadeChange
+			& case arch of
+				ARMEL -> setupRevertableProperty $
+					"/lib/ld-linux-armhf.so.3"
+					`File.isSymlinkedTo`
+					File.LinkTarget "/lib/ld-linux.so.3"
+				_ -> doNothing
 	  where
-	  	-- See https://www.stackage.org/stack/ for the list of
-		-- binaries.
-		archname = case arch of
-			X86_32 -> "i386"
-			X86_64 -> "x86_64"
-			ARMHF -> "arm"
+		url = case arch of
+			X86_32 -> "https://www.stackage.org/stack/linux-i386"
+			X86_64 -> "https://www.stackage.org/stack/linux-x86_64"
+			ARMEL -> "https://github.com/commercialhaskell/stack/releases/download/v1.7.1/stack-1.7.1-linux-arm.tar.gz"
 			-- Probably not available.
-			a -> architectureToDebianArchString a
+			a -> "https://www.stackage.org/stack/linux-" ++ architectureToDebianArchString a
 	binstack = "/usr/bin/stack"
 	tmptar = "/root/stack.tar.gz"
 	tmpdir = "/root/stack"
 
-armAutoBuilder :: DebianSuite -> Architecture -> Flavor -> Property (HasInfo + Debian)
-armAutoBuilder suite arch flavor =
+armAutoBuilder :: (DebianSuite -> Architecture -> Flavor -> Property (HasInfo + Debian)) -> DebianSuite -> Architecture -> Flavor -> Property (HasInfo + Debian)
+armAutoBuilder baseautobuilder suite arch flavor =
 	propertyList "arm git-annex autobuilder" $ props
-		& standardAutoBuilder suite arch flavor
-		& buildDepsApt
+		& baseautobuilder suite arch flavor
 		-- Works around ghc crash with parallel builds on arm.
+		& File.dirExists (homedir </> ".cabal")
 		& (homedir </> ".cabal" </> "config")
-			`File.lacksLine` "jobs: $ncpus"
-
-androidAutoBuilderContainer :: Times -> TimeOut -> Systemd.Container
-androidAutoBuilderContainer crontimes timeout =
-	androidAutoBuilderContainer' "android-git-annex-builder"
-		(tree "android" Nothing) builddir crontimes timeout
-
--- Android is cross-built in a Debian i386 container, using the Android NDK.
-androidAutoBuilderContainer'
-	:: Systemd.MachineName
-	-> Property DebianLike
-	-> FilePath
-	-> Times
-	-> TimeOut
-	-> Systemd.Container
-androidAutoBuilderContainer' name setupgitannexdir gitannexdir crontimes timeout =
-	Systemd.container name $ \d -> bootstrap d $ props
-		& osDebian (Stable "jessie") X86_32
-		& Apt.stdSourcesList
-		& User.accountFor (User builduser)
-		& File.dirExists gitbuilderdir
-		& File.ownerGroup homedir (User builduser) (Group builduser)
-		& flagFile chrootsetup ("/chrootsetup")
-			`requires` setupgitannexdir
-		& haskellPkgsInstalled "android"
-		& Apt.unattendedUpgrades
-		& buildDepsNoHaskellLibs
-		& autobuilder "android" crontimes timeout
-  where
-	-- Use git-annex's android chroot setup script, which will install
-	-- ghc-android and the NDK, all build deps, etc, in the home
-	-- directory of the builder user.
-	chrootsetup = scriptProperty
-		[ "cd " ++ gitannexdir ++ " && ./standalone/android/buildchroot-inchroot"
-		]
-		`assume` MadeChange
-	bootstrap = Chroot.debootstrapped mempty
+			`File.containsLine` "jobs: 1"
+		-- Work around https://github.com/systemd/systemd/issues/7135
+		& Systemd.containerCfg "--system-call-filter=set_tls"

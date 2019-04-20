@@ -30,9 +30,8 @@ import Propellor.Gpg
 import Propellor.Bootstrap
 import Propellor.Types.CmdLine
 import Propellor.Types.Info
-import Propellor.Property.PropellorRepo (OriginUrl(..))
+import Propellor.Property.Localdir (OriginUrl(..))
 import qualified Propellor.Shim as Shim
-import Utility.FileMode
 import Utility.SafeCommand
 import Utility.Process.NonConcurrent
 

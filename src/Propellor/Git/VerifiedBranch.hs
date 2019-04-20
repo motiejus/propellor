@@ -3,12 +3,10 @@ module Propellor.Git.VerifiedBranch where
 import Propellor.Base
 import Propellor.Git
 import Propellor.PrivData.Paths
-import Utility.FileMode
 
 {- To verify origin branch commit's signature, have to convince gpg
- - to use our keyring.
- - While running git log. Which has no way to pass options to gpg.
- - Argh!
+ - to use our keyring while running git verify-tag.
+ - Which has no way to pass options to gpg. Argh!
  -}
 verifyOriginBranch :: String -> IO Bool
 verifyOriginBranch originbranch = do
@@ -20,21 +18,26 @@ verifyOriginBranch originbranch = do
 		]
 	-- gpg is picky about perms
 	modifyFileMode privDataDir (removeModes otherGroupModes)
-	s <- readProcessEnv "git" ["log", "-n", "1", "--format=%G?", originbranch]
+	verified <- boolSystemEnv "git" [Param "verify-commit", Param originbranch]
 		(Just [("GNUPGHOME", privDataDir)])
 	nukeFile $ privDataDir </> "trustdb.gpg"
 	nukeFile $ privDataDir </> "pubring.gpg"
 	nukeFile $ privDataDir </> "gpg.conf"
-	return (s == "U\n" || s == "G\n")
+	return verified
 
 -- Returns True if HEAD is changed by fetching and merging from origin.
 fetchOrigin :: IO Bool
 fetchOrigin = do
+	fetched <- actionMessage "Pull from central git repository" $
+		boolSystem "git" [Param "fetch"]
+	if fetched
+		then mergeOrigin
+		else return False
+
+mergeOrigin :: IO Bool
+mergeOrigin = do
 	branchref <- getCurrentBranch
 	let originbranch = "origin" </> branchref
-
-	void $ actionMessage "Pull from central git repository" $
-		boolSystem "git" [Param "fetch"]
 
 	oldsha <- getCurrentGitSha1 branchref
 

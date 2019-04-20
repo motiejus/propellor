@@ -18,12 +18,10 @@ There is fairly complete
 which includes many built-in Properties for dealing with
 [Apt](http://hackage.haskell.org/package/propellor/docs/Propellor-Property-Apt.html)
 and
-[Apache](http://hackage.haskell.org/package/propellor/docs/Propellor-Property-Apache.html)
-,
+[Apache](http://hackage.haskell.org/package/propellor/docs/Propellor-Property-Apache.html),
 [Cron](http://hackage.haskell.org/package/propellor/docs/Propellor-Property-Cron.html)
 and
-[Commands](http://hackage.haskell.org/package/propellor/docs/Propellor-Property-Cmd.html)
-,
+[Commands](http://hackage.haskell.org/package/propellor/docs/Propellor-Property-Cmd.html),
 [Dns](http://hackage.haskell.org/package/propellor/docs/Propellor-Property-Dns.html)
 and
 [Docker](http://hackage.haskell.org/package/propellor/docs/Propellor-Property-Docker.html), etc.
@@ -39,11 +37,11 @@ see [configuration for the Haskell newbie](https://propellor.branchable.com/hask
 ## quick start
 
 1. Get propellor installed on your development machine (ie, laptop).
+     `apt-get install propellor`
+          or
      `cabal install propellor`
           or
-     `stack install propellor`
-          or
-     `apt-get install propellor`
+     `cabal unpack propellor; cd propellor-version; stack install`
 2. Run `propellor --init` ; this will set up a `~/.propellor/` git
    repository for you.
 3. Edit `~/.propellor/config.hs`, and add a host you want to manage.
@@ -56,3 +54,6 @@ see [configuration for the Haskell newbie](https://propellor.branchable.com/hask
    each host becomes tiresome, you can
    [automate that](http://propellor.branchable.com/automated_spins/).
 7. Write some neat new properties and send patches!
+
+(Want to get your feet wet with propellor before plunging in?
+[try this](http://propellor.branchable.com/forum/Simple_quickstart_without_git__44___SSH__44___GPG))

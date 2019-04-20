@@ -55,6 +55,7 @@ import Data.Maybe
 import Data.List
 import Data.Hashable
 import Control.Applicative
+import GHC.Stack
 import Prelude
 
 import Propellor.Types
@@ -283,6 +284,7 @@ isNewerThan x y = do
 -- fail that way.
 pickOS
 	::
+		HasCallStack =>
 		( SingKind ('KProxy :: KProxy ka)
 		, SingKind ('KProxy :: KProxy kb)
 		, DemoteRep ('KProxy :: KProxy ka) ~ [MetaType]
@@ -301,7 +303,8 @@ pickOS a b = c `addChildren` [toChildProperty a, toChildProperty b]
   where
 	-- This use of getSatisfy is safe, because both a and b
 	-- are added as children, so their info will propigate.
-	c = withOS (getDesc a) $ \_ o ->
+	c = property (getDesc a) $ do
+		o <- getOS
 		if matching o a
 			then maybe (pure NoChange) id (getSatisfy a)
 			else if matching o b
@@ -328,15 +331,9 @@ pickOS a b = c `addChildren` [toChildProperty a, toChildProperty b]
 withOS
 	:: (SingI metatypes)
 	=> Desc
-	-> (OuterMetaTypesWitness '[] -> Maybe System -> Propellor Result)
+	-> (OuterMetaTypesWitness metatypes -> Maybe System -> Propellor Result)
 	-> Property (MetaTypes metatypes)
-withOS desc a = property desc $ a dummyoutermetatypes =<< getOS
-  where
-	-- Using this dummy value allows ensureProperty to be used
-	-- even though the inner property probably doesn't target everything
-	-- that the outer withOS property targets.
-	dummyoutermetatypes :: OuterMetaTypesWitness ('[])
-	dummyoutermetatypes = OuterMetaTypesWitness sing
+withOS desc a = property' desc $ \w -> a w =<< getOS
 
 -- | A property that always fails with an unsupported OS error.
 unsupportedOS :: Property UnixLike
@@ -344,7 +341,7 @@ unsupportedOS = property "unsupportedOS" unsupportedOS'
 
 -- | Throws an error, for use in `withOS` when a property is lacking
 -- support for an OS.
-unsupportedOS' :: Propellor Result
+unsupportedOS' :: HasCallStack => Propellor Result
 unsupportedOS' = go =<< getOS
 	  where
 		go Nothing = error "Unknown host OS is not supported by this property."

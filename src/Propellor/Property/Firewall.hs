@@ -17,7 +17,7 @@ module Propellor.Property.Firewall (
 	IPWithMask(..),
 ) where
 
-import Data.Monoid
+import qualified Data.Semigroup as Sem
 import Data.Char
 import Data.List
 
@@ -44,8 +44,8 @@ rule c tb tg rs = property ("firewall rule: " <> show r) addIpTable
 toIpTable :: Rule -> [CommandParam]
 toIpTable r =  map Param $
 	val (ruleChain r) :
-	toIpTableArg (ruleRules r) ++
-	["-t", val (ruleTable r), "-j", val (ruleTarget r)]
+	["-t", val (ruleTable r), "-j", val (ruleTarget r)] ++
+	toIpTableArg (ruleRules r)
 
 toIpTableArg :: Rules -> [String]
 toIpTableArg Everything = []
@@ -199,6 +199,9 @@ data Rules
 
 infixl 0 :-
 
+instance Sem.Semigroup Rules where
+	(<>) = (:-)
+
 instance Monoid Rules where
 	mempty  = Everything
-	mappend = (:-)
+	mappend = (Sem.<>)

@@ -1,5 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -44,6 +45,7 @@ module Propellor.Types (
 	, module Propellor.Types.ZFS
 	) where
 
+import qualified Data.Semigroup as Sem
 import Data.Monoid
 import Control.Applicative
 import Prelude
@@ -155,13 +157,19 @@ instance IsProp (RevertableProperty setupmetatypes undometatypes) where
 
 -- | Type level calculation of the type that results from combining two
 -- types of properties.
-type family CombinedType x y
-type instance CombinedType (Property (MetaTypes x)) (Property (MetaTypes y)) = Property (MetaTypes (Combine x y))
-type instance CombinedType (RevertableProperty (MetaTypes x) (MetaTypes x')) (RevertableProperty (MetaTypes y) (MetaTypes y')) = RevertableProperty (MetaTypes (Combine x y)) (MetaTypes (Combine x' y'))
--- When only one of the properties is revertable, the combined property is
--- not fully revertable, so is not a RevertableProperty.
-type instance CombinedType (RevertableProperty (MetaTypes x) (MetaTypes x')) (Property (MetaTypes y)) = Property (MetaTypes (Combine x y))
-type instance CombinedType (Property (MetaTypes x)) (RevertableProperty (MetaTypes y) (MetaTypes y')) = Property (MetaTypes (Combine x y))
+type family CombinedType x y where
+	CombinedType (Property (MetaTypes x)) (Property (MetaTypes y)) =
+		Property (MetaTypes (Combine x y))
+	CombinedType
+		(RevertableProperty (MetaTypes x) (MetaTypes x'))
+		(RevertableProperty (MetaTypes y) (MetaTypes y')) =
+			RevertableProperty (MetaTypes (Combine x y)) (MetaTypes (Combine x' y'))
+	-- When only one of the properties is revertable, the combined
+	-- property is not fully revertable, so is not a RevertableProperty.
+	CombinedType (RevertableProperty (MetaTypes x) (MetaTypes x')) (Property (MetaTypes y)) =
+		Property (MetaTypes (Combine x y))
+	CombinedType (Property (MetaTypes x)) (RevertableProperty (MetaTypes y) (MetaTypes y')) =
+		Property (MetaTypes (Combine x y))
 
 type ResultCombiner = Maybe (Propellor Result) -> Maybe (Propellor Result) -> Maybe (Propellor Result)
 
@@ -214,14 +222,13 @@ class TightenTargets p where
 instance TightenTargets Property where
 	tightenTargets (Property _ d a i c) = Property sing d a i c
 
--- | Any type of Property is a monoid. When properties x and y are
+-- | Any type of Property is a Semigroup. When properties x and y are
 -- appended together, the resulting property has a description like
 -- "x and y". Note that when x fails to be ensured, it will not
 -- try to ensure y.
-instance SingI metatypes => Monoid (Property (MetaTypes metatypes))
+instance SingI metatypes => Sem.Semigroup (Property (MetaTypes metatypes))
   where
-	mempty = Property sing "noop property" Nothing mempty mempty
-	mappend (Property _ d1 a1 i1 c1) (Property _ d2 a2 i2 c2) =
+	Property _ d1 a1 i1 c1 <> Property _ d2 a2 i2 c2 =
 	  	Property sing d (a1 <> a2) (i1 <> i2) (c1 <> c2)
 	  where
 		-- Avoid including "noop property" in description
@@ -237,11 +244,23 @@ instance SingI metatypes => Monoid (Property (MetaTypes metatypes))
 -- property has a description like "x and y".
 -- Note that when x fails to be ensured, it will not try to ensure y.
 instance
-	( Monoid (Property setupmetatypes)
-	, Monoid (Property undometatypes)
+	( Sem.Semigroup (Property (MetaTypes setupmetatypes))
+	, Sem.Semigroup (Property (MetaTypes undometatypes))
+	, SingI setupmetatypes
+	, SingI undometatypes
 	)
-	=> Monoid (RevertableProperty setupmetatypes undometatypes)
+	=> Sem.Semigroup (RevertableProperty (MetaTypes setupmetatypes) (MetaTypes undometatypes))
+  where
+	RevertableProperty s1 u1 <> RevertableProperty s2 u2 =
+		RevertableProperty (s1 <> s2) (u2 <> u1)
+
+instance
+	( Monoid (Property (MetaTypes setupmetatypes))
+	, Monoid (Property (MetaTypes undometatypes))
+	, SingI setupmetatypes
+	, SingI undometatypes
+	)
+	=> Monoid (RevertableProperty (MetaTypes setupmetatypes) (MetaTypes undometatypes))
   where
 	mempty = RevertableProperty mempty mempty
-	mappend (RevertableProperty s1 u1) (RevertableProperty s2 u2) =
-		RevertableProperty (s1 <> s2) (u2 <> u1)
+	mappend = (Sem.<>)

@@ -17,7 +17,9 @@ module Propellor.Property.DiskImage (
 	imageRebuiltFor,
 	imageBuiltFrom,
 	imageExists,
-	Grub.BIOS(..),
+	imageChrootNotPresent,
+	GrubTarget(..),
+	noBootloader,
 ) where
 
 import Propellor.Base
@@ -40,7 +42,7 @@ import Propellor.Types.Info
 import Propellor.Types.Bootloader
 import Propellor.Container
 import Utility.Path
-import Utility.FileMode
+import Utility.DataUnits
 
 import Data.List (isPrefixOf, isInfixOf, sortBy, unzip4)
 import Data.Function (on)
@@ -198,14 +200,13 @@ imageBuilt' rebuild img mkchroot tabletype partspec =
 		`describe` desc
   where
 	desc = "built disk image " ++ describeDiskImage img
-	RawDiskImage imgfile = rawDiskImage img
 	cleanrebuild :: Property Linux
 	cleanrebuild
 		| rebuild = property desc $ do
 			liftIO $ removeChroot chrootdir
 			return MadeChange
 		| otherwise = doNothing
-	chrootdir = imgfile ++ ".chroot"
+	chrootdir = imageChroot img
 	chroot =
 		let c = propprivdataonly $ mkchroot chrootdir
 		in setContainerProps c $ containerProps c
@@ -220,13 +221,14 @@ imageBuilt' rebuild img mkchroot tabletype partspec =
 	-- installed.
 	final = case fromInfo (containerInfo chroot) of
 		[] -> unbootable "no bootloader is installed"
-		[GrubInstalled] -> grubFinalized
+		[GrubInstalled grubtarget] -> grubFinalized grubtarget
 		[UbootInstalled p] -> ubootFinalized p
 		[FlashKernelInstalled] -> flashKernelFinalized
 		[UbootInstalled p, FlashKernelInstalled] -> 
 			ubootFlashKernelFinalized p
 		[FlashKernelInstalled, UbootInstalled p] -> 
 			ubootFlashKernelFinalized p
+		[NoBootloader] -> noBootloaderFinalized
 		_ -> unbootable "multiple bootloaders are installed; don't know which to use"
 
 -- | This property is automatically added to the chroot when building a
@@ -265,7 +267,7 @@ imageBuiltFrom img chrootdir tabletype final partspec = mkimg <!> rmimg
 		imageFinalized final dest mnts mntopts devs parttable
 	rmimg = undoRevertableProperty (buildDiskImage img)
 		`before` undoRevertableProperty (imageExists' dest dummyparttable)
-	dummyparttable = PartTable tabletype []
+	dummyparttable = PartTable tabletype safeAlignment []
 
 partitionsPopulated :: FilePath -> [Maybe MountPoint] -> [MountOpts] -> [LoopDev] -> Property DebianLike
 partitionsPopulated chrootdir mnts mntopts devs = property' desc $ \w ->
@@ -274,13 +276,18 @@ partitionsPopulated chrootdir mnts mntopts devs = property' desc $ \w ->
 	desc = "partitions populated from " ++ chrootdir
 
 	go _ Nothing _ _ = noChange
-	go w (Just mnt) mntopt loopdev = withTmpDir "mnt" $ \tmpdir -> bracket
-		(liftIO $ mount "auto" (partitionLoopDev loopdev) tmpdir mntopt)
-		(const $ liftIO $ umountLazy tmpdir)
-		$ \ismounted -> if ismounted
-			then ensureProperty w $
-				syncDirFiltered (filtersfor mnt) (chrootdir ++ mnt) tmpdir
-			else return FailedChange
+	go w (Just mnt) mntopt loopdev = ifM (liftIO $ doesDirectoryExist srcdir) $
+		( withTmpDir "mnt" $ \tmpdir -> bracket
+			(liftIO $ mount "auto" (partitionLoopDev loopdev) tmpdir mntopt)
+			(const $ liftIO $ umountLazy tmpdir)
+			$ \ismounted -> if ismounted
+				then ensureProperty w $
+					syncDirFiltered (filtersfor mnt) srcdir tmpdir
+				else return FailedChange
+		, return NoChange
+		)
+	  where
+		srcdir = chrootdir ++ mnt
 
 	filtersfor mnt =
 		let childmnts = map (drop (length (dropTrailingPathSeparator mnt))) $
@@ -300,7 +307,7 @@ fitChrootSize :: TableType -> [PartSpec ()] -> [PartSize] -> ([Maybe MountPoint]
 fitChrootSize tt l basesizes = (mounts, mountopts, parttable)
   where
 	(mounts, mountopts, sizers, _) = unzip4 l
-	parttable = PartTable tt (zipWith id sizers basesizes)
+	parttable = PartTable tt safeAlignment (zipWith id sizers basesizes)
 
 -- | Generates a map of the sizes of the contents of
 -- every directory in a filesystem tree.
@@ -339,17 +346,24 @@ getMountSz szm l (Just mntpt) =
 imageExists :: RawDiskImage -> ByteSize -> Property Linux
 imageExists (RawDiskImage img) isz = property ("disk image exists" ++ img) $ liftIO $ do
 	ms <- catchMaybeIO $ getFileStatus img
-	case ms of
+	case fmap (toInteger . fileSize) ms of
 		Just s
-			| toInteger (fileSize s) == toInteger sz -> return NoChange
-			| toInteger (fileSize s) > toInteger sz -> do
+			| s == toInteger sz -> return NoChange
+			| s > toInteger sz -> do
+				infoMessage ["truncating " ++ img ++ " to " ++ humansz]
 				setFileSize img (fromInteger sz)
 				return MadeChange
-		_ -> do
+			| otherwise -> do
+				infoMessage ["expanding " ++ img ++ " from " ++ roughSize storageUnits False s ++ " to " ++ humansz]
+				L.writeFile img (L.replicate (fromIntegral sz) 0)
+				return MadeChange
+		Nothing -> do
+			infoMessage ["creating " ++ img ++ " of size " ++ humansz]
 			L.writeFile img (L.replicate (fromIntegral sz) 0)
 			return MadeChange
   where
 	sz = ceiling (fromInteger isz / sectorsize) * ceiling sectorsize
+	humansz = roughSize storageUnits False (toInteger sz)
 	-- Disks have a sector size, and making a disk image not
 	-- aligned to a sector size will confuse some programs.
 	-- Common sector sizes are 512 and 4096; use 4096 as it's larger.
@@ -363,7 +377,7 @@ imageExists' :: RawDiskImage -> PartTable -> RevertableProperty DebianLike UnixL
 imageExists' dest@(RawDiskImage img) parttable = (setup <!> cleanup) `describe` desc
   where
 	desc = "disk image exists " ++ img
-	parttablefile = img ++ ".parttable"
+	parttablefile = imageParttableFile dest
 	setup = property' desc $ \w -> do
 		oldparttable <- liftIO $ catchDefaultIO "" $ readFileStrict parttablefile
 		res <- ensureProperty w $ imageExists dest (partTableSize parttable)
@@ -388,7 +402,7 @@ imageExists' dest@(RawDiskImage img) parttable = (setup <!> cleanup) `describe` 
 type Finalization = (RawDiskImage -> FilePath -> [LoopDev] -> Property Linux)
 
 imageFinalized :: Finalization -> RawDiskImage -> [Maybe MountPoint] -> [MountOpts] -> [LoopDev] -> PartTable -> Property Linux
-imageFinalized final img mnts mntopts devs (PartTable _ parts) =
+imageFinalized final img mnts mntopts devs (PartTable _ _ parts) =
 	property' "disk image finalized" $ \w ->
 		withTmpDir "mnt" $ \top ->
 			go w top `finally` liftIO (unmountall top)
@@ -407,7 +421,7 @@ imageFinalized final img mnts mntopts devs (PartTable _ parts) =
 	orderedmntsdevs = sortBy (compare `on` fst) $ zip mnts (zip mntopts devs)
 
 	swaps = map (SwapPartition . partitionLoopDev . snd) $
-		filter ((== LinuxSwap) . partFs . fst) $
+		filter ((== Just LinuxSwap) . partFs . fst) $
 			zip parts devs
 
 	mountall top = forM_ orderedmntsdevs $ \(mp, (mopts, loopdev)) -> case mp of
@@ -441,9 +455,10 @@ unbootable msg = \_ _ _ -> property desc $ do
   where
 	desc = "image is not bootable"
 
-grubFinalized :: Finalization
-grubFinalized _img mnt loopdevs = Grub.bootsMounted mnt wholediskloopdev
-	`describe` "disk image boots using grub"
+grubFinalized :: GrubTarget -> Finalization
+grubFinalized grubtarget _img mnt loopdevs = 
+	Grub.bootsMounted mnt wholediskloopdev grubtarget
+		`describe` "disk image boots using grub"
   where
 	-- It doesn't matter which loopdev we use; all
 	-- come from the same disk image, and it's the loop dev
@@ -462,6 +477,33 @@ ubootFlashKernelFinalized :: (FilePath -> FilePath -> Property Linux) -> Finaliz
 ubootFlashKernelFinalized p img mnt loopdevs = 
 	ubootFinalized p img mnt loopdevs
 		`before` flashKernelFinalized img mnt loopdevs
+
+-- | Normally a boot loader is installed on a disk image. However,
+-- when the disk image will be booted by eg qemu booting the kernel and
+-- initrd, no boot loader is needed, and this property can be used.
+noBootloader :: Property (HasInfo + UnixLike)
+noBootloader = pureInfoProperty "no bootloader" [NoBootloader]
+
+noBootloaderFinalized :: Finalization
+noBootloaderFinalized _img _mnt _loopDevs = doNothing
+
+imageChrootNotPresent :: DiskImage d => d -> Property UnixLike
+imageChrootNotPresent img = check (doesDirectoryExist dir) $
+	property "destroy the chroot used to build the image" $ makeChange $ do
+		removeChroot dir
+		nukeFile $ imageParttableFile img
+  where
+	dir = imageChroot img
+
+imageChroot :: DiskImage d => d -> FilePath
+imageChroot img = imgfile <.> "chroot"
+  where
+	RawDiskImage imgfile = rawDiskImage img
+
+imageParttableFile :: DiskImage d => d -> FilePath
+imageParttableFile img = imgfile <.> "parttable"
+  where
+	RawDiskImage imgfile = rawDiskImage img
 
 isChild :: FilePath -> Maybe MountPoint -> Bool
 isChild mntpt (Just d)

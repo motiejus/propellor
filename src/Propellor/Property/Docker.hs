@@ -1,6 +1,8 @@
 {-# LANGUAGE FlexibleContexts, TypeSynonymInstances, FlexibleInstances, TypeFamilies #-}
 
--- | Docker support for propellor
+-- | Maintainer: currently unmaintained; your name here!
+--
+-- Docker support for propellor
 --
 -- The existance of a docker container is just another Property of a system,
 -- which propellor can set up. See config.hs for an example.
@@ -596,8 +598,9 @@ chain hostlist hn s = case toContainerId s of
 	go cid h = do
 		changeWorkingDirectory localdir
 		onlyProcess (provisioningLock cid) $
-			runChainPropellor h $ 
+			runChainPropellor (setcaps h) $ 
 				ensureChildProperties $ hostProperties h
+	setcaps h = h { hostInfo = hostInfo h `addInfo` [HostnameContained, FilesystemContained] }
 
 stopContainer :: ContainerId -> IO Bool
 stopContainer cid = boolSystem dockercmd [Param "stop", Param $ fromContainerId cid ]
